@@ -1,9 +1,9 @@
-import { G } from './state.js?v=12';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=12';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=12';
-import { findPath, inSite, nearestWp, pathClear } from './map.js?v=12';
-import { useAbility, botCast } from './abilities.js?v=12';
-import { sfx } from './audio.js?v=12';
+import { G } from './state.js?v=13';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=13';
+import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=13';
+import { findPath, inSite, nearestWp, pathClear } from './map.js?v=13';
+import { useAbility, botCast } from './abilities.js?v=13';
+import { sfx } from './audio.js?v=13';
 
 const THINK_DT = .12;
 
@@ -29,6 +29,8 @@ export function resetBotRound(ent){
   a.target = null; a.lastSeenAt = -9; a.burstLeft = 0; a.acqT = 0;
   a.flags = {}; a.abGate = 0; a.rotated = false;
   a.stuckT = 0; a.sideUntil = 0; a.state = 'wait'; a.stageAt = 0;
+  a.fellBack = false; a.fallbackUntil = 0;
+  a.repositioned = false; a.introtGate = 0;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -105,7 +107,10 @@ function followPath(bot, dt, sprint=true){
   const wp = lookaheadTarget(bot, a.path, a.pathI);
   const ty = yawTo(bot.pos, wp);
   if(!a.target){
-    bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*8);
+    // 行进扫视：推进/搜索时视线在前进方向附近来回检查角落（更像人）
+    const scanning = a.state==='advance' || a.state==='hunt' || a.state==='fetch' || a.state==='retake' || a.state==='execute';
+    const sway = scanning ? Math.sin(G.now*1.15 + bot.id*1.7)*.32 : 0;
+    bot.yaw += angDiff(bot.yaw, ty + sway) * Math.min(1, dt*8);
     bot.pitch *= (1 - dt*4);
   }
   let spd = moveSpeed(bot) * (sprint?1:.55);
@@ -521,6 +526,34 @@ export function updateBots(dt){
     if(bot.isPlayer || !bot.alive){ if(!bot.isPlayer) updateBodyPose(bot); continue; }
     const a = bot.ai;
     if(m.phase==='buy'){
+      // 防守方开局立刻前往点位架枪（像真人一样提前就位）；进攻方在天幕内自由活动
+      if(sideOf(bot)==='def' && G.map.defPostList?.length){
+        if(!a.hold){
+          const posts = G.map.defPostList;
+          const p = posts[a.role % posts.length];
+          a.hold = V3(p.p[0],0,p.p[1]);
+          a.holdLook = V3(p.look[0],1.5,p.look[1]);
+          a.goal = a.hold;
+          a.state = 'post';
+          setPath(bot, a.hold);
+        }
+        let arrived = false;
+        if(a.path.length) arrived = followPath(bot, dt, true);
+        else if(dist2d(bot.pos, a.hold) > 1.4) moveDirect(bot, a.hold, dt, true);
+        else arrived = true;
+        if(arrived){
+          bot.vel.x *= .6; bot.vel.z *= .6;
+          if(a.holdLook){
+            const ty = yawTo(bot.pos, a.holdLook) + Math.sin(G.now*.5 + bot.id*1.9)*.35;
+            bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*4);
+            bot.pitch *= (1 - dt*3);
+          }
+        }
+        moveEntity(bot, dt);
+        stuckCheck(bot, dt);
+        updateBodyPose(bot);
+        continue;
+      }
       buyWander(bot, dt);
       moveEntity(bot, dt);
       updateBodyPose(bot);
@@ -630,6 +663,24 @@ function thinkAttack(bot){
 
   if(G.now < a.planStartAt){ return; }
 
+  // 残血且刚受伤：暂时后撤拉开，找队友/等回血，再重新进攻（更像人）
+  if(bot.hp < 32 && G.now - bot.lastDamaged < 2.5 && !a.fellBack &&
+     a.state!=='fallback' && a.state!=='plant' && sp.carrier!==bot && sp.state!=='planted'){
+    a.fellBack = true;
+    a.state = 'fallback';
+    a.fallbackUntil = G.now + rand(3.5, 5.5);
+    let dest = null, bd = Infinity;
+    for(const e of G.ents){
+      if(e===bot || !e.alive || e.team!==bot.team) continue;
+      const d = dist2d(e.pos, bot.pos);
+      if(d > 6 && d < bd){ bd = d; dest = e.pos.clone(); }
+    }
+    if(!dest) dest = V3(bot.pos.x*.5, 0, clamp(bot.pos.z + 16, -36, 36));
+    a.goal = dest;
+    setPath(bot, dest);
+    return;
+  }
+
   // 转点重置
   if(m.planSwitchedAt && a.planSite !== site && a.state!=='hunt'){
     a.state = 'wait'; a.hold = null;
@@ -702,6 +753,11 @@ function thinkAttack(bot){
       if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 6) a.state='wait';
       break;
     }
+    case 'fallback': {
+      if(G.now > a.fallbackUntil || bot.hp > 55){ a.state='wait'; break; }
+      if(needRepath(bot, a.goal)) setPath(bot, a.goal);
+      break;
+    }
     case 'hold': break;
     default: a.state = 'wait';
   }
@@ -741,6 +797,31 @@ function thinkDefend(bot){
     a.holdLook = null;
     a.state='post';
     setPath(bot, a.hold);
+  }
+
+  // 驻点被打残：换到另一个防守位重新架枪（像人一样避免死守被清的点）
+  if(a.hold && !a.target && bot.hp < 60 && G.now - bot.lastDamaged < 2 && !a.repositioned){
+    a.repositioned = true;
+    const posts = G.map.defPostList;
+    if(posts.length > 1){
+      const p = posts[(a.role + 1 + Math.floor(Math.random()*(posts.length-1))) % posts.length];
+      a.hold = V3(p.p[0],0,p.p[1]);
+      a.holdLook = V3(p.look[0],1.5,p.look[1]);
+      a.state='post'; a.goal = a.hold;
+      setPath(bot, a.hold);
+    }
+  }
+
+  // 听声转位：己方情报点离驻点很远时，按难度概率移动过去支援
+  const c = m.contact[bot.team];
+  if(c && G.now - c.t < 3 && a.hold && dist2d(c.pos, a.hold) > 22 && G.now > (a.introtGate||0)){
+    a.introtGate = G.now + 12;
+    if(Math.random() < .2 + .4*D()){
+      a.hold = c.pos.clone();
+      a.holdLook = null;
+      a.state='post'; a.goal = a.hold;
+      setPath(bot, a.hold);
+    }
   }
 
   if(!a.hold){
@@ -822,12 +903,14 @@ function navUpdate(bot, dt){
     arrived = true;
   }
   if(arrived && (a.hold || a.state==='stage')){
-    // 驻守朝向：优先最近接敌情报，其次预设视角
+    // 驻守朝向：优先最近接敌情报，其次预设视角；无情报时缓慢扫描角度（像人巡视）
     const c = m.contact[bot.team];
+    const fresh = c && G.now - c.t < 4 && dist2d(c.pos, bot.pos) < 32;
     let look = a.holdLook;
-    if(c && G.now - c.t < 4 && dist2d(c.pos, bot.pos) < 32) look = c.pos;
+    if(fresh) look = c.pos;
     if(look){
-      const ty = yawTo(bot.pos, look);
+      const sweep = fresh ? 0 : Math.sin(G.now*.55 + bot.id*2.1)*.45;
+      const ty = yawTo(bot.pos, look) + sweep;
       bot.yaw += angDiff(bot.yaw, ty)*Math.min(1,dt*5);
       bot.pitch *= (1-dt*3);
     }

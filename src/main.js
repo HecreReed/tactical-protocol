@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=12';
-import { buildMap } from './map.js?v=12';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=12';
-import { initAudio } from './audio.js?v=12';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=12';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=12';
-import { updateBots } from './bots.js?v=12';
-import { startMatch, updateGame } from './game.js?v=12';
-import { updateProjectiles, tickHealAndZones } from './abilities.js?v=12';
+import { G } from './state.js?v=13';
+import { buildMap } from './map.js?v=13';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=13';
+import { initAudio } from './audio.js?v=13';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=13';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=13';
+import { updateBots } from './bots.js?v=13';
+import { startMatch, updateGame } from './game.js?v=13';
+import { updateProjectiles, tickHealAndZones } from './abilities.js?v=13';
 
 let started = false;
 let sun = null;
@@ -97,7 +97,11 @@ function initPointerLock(){
     if(!started || G.buyOpen || G.menuOpen) return;
     if(G.match?.phase==='over') return;
     if(G.observer) return;
-    el.requestPointerLock();
+    // unadjustedMovement：绕过系统鼠标加速，消除转视角抖动（不支持时回退）
+    try {
+      const pr = el.requestPointerLock({ unadjustedMovement: true });
+      if(pr && pr.catch) pr.catch(()=> el.requestPointerLock());
+    } catch { el.requestPointerLock(); }
   };
   el.addEventListener('click', request);
   document.querySelector('#lockHint .enterBtn').addEventListener('click', request);

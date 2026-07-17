@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=12';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=12';
-import { AGENTS } from './config.js?v=12';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=12';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=12';
-import { inAnyOpen } from './map.js?v=12';
-import { sfx } from './audio.js?v=12';
-import { raySphere } from './utils.js?v=12';
+import { G } from './state.js?v=13';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=13';
+import { AGENTS } from './config.js?v=13';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=13';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=13';
+import { inAnyOpen } from './map.js?v=13';
+import { sfx } from './audio.js?v=13';
+import { raySphere } from './utils.js?v=13';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -183,18 +183,25 @@ export function useAbility(ent, key){
     case 'smokeProj':
       throwProj(ent, 'smoke', 15, 3); sfx.ability(); break;
     case 'smokeSky': {
-      // 天穹/暗幕 — 进入下烟模式（带地面瞄准指示器）
-      if(!ent.isPlayer || (ent.agent!=='tianqiong' && ent.agent!=='anmu')){
-        // bot 或非玩家：原有逻辑
-        const p = aimPoint(ent, 60);
-        targetRing(p, 4.5, 1200);
-        setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
-        if(key==='e') ent.abCd.e = G.now + def.cd;
-        sfx.ability();
+      if(ent.isPlayer && ent.agent==='tianqiong'){
+        // 天穹（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
+        G.hooks.openSmokeMap?.(ent, key);
+        used = false;
         break;
       }
-      // 玩家下烟模式（不立即消耗，等点击确认）
-      G.smokeMode = { agent: ent, key, cd: def.cd||20, until: G.now + 12 };
+      if(ent.isPlayer && ent.agent==='anmu'){
+        // 暗幕（原版幽影式）：进入下烟模式（指针可穿墙瞄点，左键确认时才消耗）
+        G.smokeMode = { agent: ent, key, cd: def.cd||20, until: G.now + 12 };
+        G.hooks.hudMsg?.('下烟模式：瞄准落点（可越过墙体）· 左键投放 · 其他键取消');
+        used = false;
+        break;
+      }
+      // bot / 非玩家：直接瞄点投放
+      const p = aimPoint(ent, 60);
+      targetRing(p, 4.5, 1200);
+      setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
+      if(key==='e') ent.abCd.e = G.now + def.cd;
+      sfx.ability();
       break;
     }
     case 'molly':
@@ -395,7 +402,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=12').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=13').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

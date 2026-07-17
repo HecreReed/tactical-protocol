@@ -1,11 +1,12 @@
-import { G, saveSettings } from './state.js?v=12';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=12';
-import { MAPS } from './map.js?v=12';
-import { fmtTime, clamp, dist2d } from './utils.js?v=12';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=12';
-import { tryBuyWeapon, tryBuyArmor, sideOf } from './game.js?v=12';
-import { buyAbility } from './abilities.js?v=12';
-import { sfx, setVolume } from './audio.js?v=12';
+import { G, saveSettings } from './state.js?v=13';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=13';
+import { MAPS, inAnyOpen } from './map.js?v=13';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=13';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=13';
+import { tryBuyWeapon, tryBuyArmor, sideOf } from './game.js?v=13';
+import { buyAbility } from './abilities.js?v=13';
+import { spawnSmoke, targetRing } from './effects.js?v=13';
+import { sfx, setVolume } from './audio.js?v=13';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -36,6 +37,7 @@ export function initHUD(){
     crosshair: $('crosshair'),
     flashOverlay: $('flashOverlay'),
     settingsMenu: $('settingsMenu'),
+    smokeMap: $('smokeMap'), smokeMapCanvas: $('smokeMapCanvas'), smokeMapInfo: $('smokeMapInfo'),
   };
 
   G.hooks.killfeed = killfeed;
@@ -49,6 +51,11 @@ export function initHUD(){
   G.hooks.refreshBuy = buildBuyMenu;
   G.hooks.matchOver = matchOver;
   G.hooks.flash = playerFlashed;
+  G.hooks.openSmokeMap = openSmokeMap;
+  G.hooks.smokeMapKey = smokeMapKey;
+
+  els.smokeMapCanvas.addEventListener('click', smokeMapClick);
+  els.smokeMap.addEventListener('contextmenu', e=>{ e.preventDefault(); closeSmokeMap(); });
 
   $('buyClose').onclick = ()=> setBuyOpen(false);
   $('gearBtn').onclick = ()=> openSettings();
@@ -73,6 +80,87 @@ function playerFlashed(dur){
     el.style.transition = `opacity ${dur*.75}s ease-in`;
     el.style.opacity = 0;
   }, dur*250);
+}
+
+// ---------- 天穹战术地图下烟（原版炼狱式） ----------
+const sMap = { open:false, ent:null, key:null, placed:0 };
+function openSmokeMap(ent, key){
+  if(sMap.open) return;
+  sMap.open = true; sMap.ent = ent; sMap.key = key; sMap.placed = 0;
+  els.smokeMap.classList.remove('hidden');
+  G.menuOpen = true;
+  document.exitPointerLock?.();
+  drawSmokeMap();
+}
+function closeSmokeMap(relock=true){
+  if(!sMap.open) return;
+  const { ent, key, placed } = sMap;
+  sMap.open = false;
+  els.smokeMap.classList.add('hidden');
+  G.menuOpen = false;
+  if(placed > 0 && key==='e' && ent) ent.abCd.e = G.now + (ent.ab[key]?.def.cd || 20);
+  if(relock && G.match && G.match.phase!=='over' && !G.buyOpen){
+    try {
+      const pr = G.renderer?.domElement?.requestPointerLock({ unadjustedMovement: true });
+      if(pr && pr.catch) pr.catch(()=> G.renderer?.domElement?.requestPointerLock());
+    } catch { G.renderer?.domElement?.requestPointerLock?.(); }
+  }
+}
+function smokeMapKey(code){
+  if(!sMap.open) return false;
+  if(['KeyE','Escape','KeyC','KeyQ','KeyX','Digit1','Digit2','Digit3'].includes(code)){
+    closeSmokeMap();
+    return true;
+  }
+  return false;
+}
+function drawSmokeMap(){
+  const c = els.smokeMapCanvas, g = c.getContext('2d');
+  const k = 460/84, off = 42;
+  g.clearRect(0,0,460,460);
+  g.drawImage(mmStatic, 0,0,230,230, 0,0,460,460);
+  // 已存在的烟雾
+  g.fillStyle = 'rgba(220,226,234,.45)';
+  for(const s of G.smokes){ g.beginPath(); g.arc((s.pos.x+off)*k,(s.pos.z+off)*k, s.r*k, 0, 7); g.fill(); }
+  const p = sMap.ent;
+  if(p){
+    // 队友位置
+    g.fillStyle = '#39d0c9';
+    for(const e of G.ents){
+      if(!e.alive || e.team!==p.team || e===p) continue;
+      g.beginPath(); g.arc((e.pos.x+off)*k,(e.pos.z+off)*k, 4, 0, 7); g.fill();
+    }
+    // 自己（带朝向）
+    g.save();
+    g.translate((p.pos.x+off)*k,(p.pos.z+off)*k);
+    g.rotate(-p.yaw);
+    g.fillStyle = '#fff';
+    g.beginPath(); g.moveTo(0,-9); g.lineTo(6,7); g.lineTo(-6,7); g.closePath(); g.fill();
+    g.restore();
+  }
+  const n = p ? p.ab[sMap.key].n : 0;
+  els.smokeMapInfo.textContent = `剩余烟幕 ×${n} · 左键点击地图投放 · E / 右键 / Esc 收起`;
+}
+function smokeMapClick(e){
+  if(!sMap.open) return;
+  const ent = sMap.ent;
+  const ph = G.match?.phase;
+  if(!ent?.alive || (ph!=='live' && ph!=='planted')){ closeSmokeMap(false); return; }
+  const slot = ent.ab[sMap.key];
+  if(slot.n <= 0){ closeSmokeMap(); return; }
+  const rect = els.smokeMapCanvas.getBoundingClientRect();
+  const k = 460/84, off = 42;
+  const wx = (e.clientX - rect.left) * (460/rect.width) / k - off;
+  const wz = (e.clientY - rect.top) * (460/rect.height) / k - off;
+  if(!inAnyOpen(wx, wz)){ sfx.deny(); return; }
+  slot.n--;
+  sMap.placed++;
+  const pt = V3(wx, 0, wz);
+  targetRing(pt, 4.5, 1200);
+  setTimeout(()=>{ const p2=G.match?.phase; if(p2==='live'||p2==='planted') spawnSmoke(pt, 4.5, 19); }, 1100);
+  sfx.ability();
+  drawSmokeMap();
+  if(slot.n <= 0) setTimeout(()=> closeSmokeMap(), 220);
 }
 
 // ---------- 设置 ----------
@@ -454,6 +542,13 @@ function drawMinimap(){
 export function updateHUD(){
   const m = G.match, p = G.player;
   if(!m) return;
+
+  // 天穹战术地图：死亡/回合结束自动收起，打开时实时刷新
+  if(sMap.open){
+    const ph = m.phase;
+    if(!sMap.ent?.alive || (ph!=='live' && ph!=='planted')) closeSmokeMap(false);
+    else drawSmokeMap();
+  }
 
   els.scoreAlly.textContent = m.score.ally;
   els.scoreEnemy.textContent = m.score.enemy;

@@ -165,6 +165,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #helpTip{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--dim);letter-spacing:2px;background:var(--panel);padding:4px 14px}
 #flashOverlay{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:25}
 
+/* ---------- 天穹战术下烟地图 ---------- */
+#smokeMap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:22;background:rgba(8,14,20,.96);border:1px solid var(--gold);padding:14px 18px 12px;pointer-events:auto;text-align:center;box-shadow:0 0 40px rgba(0,0,0,.6)}
+#smokeMap h2{font-size:14px;letter-spacing:4px;color:var(--gold);margin-bottom:10px}
+#smokeMapCanvas{display:block;border:1px solid #24333f;cursor:crosshair;background:#0c141c}
+#smokeMapInfo{margin-top:9px;font-size:12px;color:var(--dim);letter-spacing:2px}
+
 /* ---------- Settings ---------- */
 #settingsMenu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;background:rgba(10,17,24,.97);border:1px solid #24333f;z-index:40;padding:24px 30px;pointer-events:auto}
 #settingsMenu h1{font-size:20px;letter-spacing:5px;border-bottom:2px solid var(--teal);display:inline-block;padding-bottom:4px;margin-bottom:16px}
@@ -277,6 +283,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <button id="settingsClose">保 存 并 关 闭</button>
 </div>
 
+<div id="smokeMap" class="hidden">
+  <h2>🛰️ 空降烟幕 — 战术地图</h2>
+  <canvas id="smokeMapCanvas" width="460" height="460"></canvas>
+  <div id="smokeMapInfo"></div>
+</div>
+
 <div id="flashOverlay"></div>
 
 <div id="endScreen" class="overlay hidden">
@@ -285,6 +297,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <button onclick="location.reload()">再 来 一 局</button>
 </div>
 
-<script type="module" src="./src/main.js?v=12"></script>
+<script type="module" src="./src/main.js?v=13"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=12";
-import { V3, rayAABB, dist2d } from "./utils.js?v=12";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=12";
+import { G } from "./state.js?v=13";
+import { V3, rayAABB, dist2d } from "./utils.js?v=13";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=13";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -657,7 +657,8 @@ export function buildColliders(md, open){
   for(const[x1,z1,x2,z2,h]of(md.platforms||[])) colliders.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});
   for(const s of(md.stairs||[])) for(const b of buildStairBoxes(s)) colliders.push(b);
   for(const[cx,cz,s,h]of(md.crates||[])) colliders.push({min:V3(cx-s/2,0,cz-s/2),max:V3(cx+s/2,h,cz+s/2)});
-  for(const[x1,z1,x2,z2,y]of(md.roofs||[])) colliders.push({min:V3(x1,y,z1),max:V3(x2,y+.25,z2)});
+  // 屋顶碰撞体向上加高：任何跳跃/技能都无法站上屋顶
+  for(const[x1,z1,x2,z2,y]of(md.roofs||[])) colliders.push({min:V3(x1,y,z1),max:V3(x2,y+2.6,z2)});
   return colliders;
 }
 
@@ -1021,7 +1022,7 @@ export function buildMap(scene, mapId){
     const trim=new THREE.Mesh(new THREE.BoxGeometry(w,.08,.1),new THREE.MeshStandardMaterial({color:md.accent,emissive:md.accent,emissiveIntensity:1.2}));
     trim.position.set((x1+x2)/2,y+.02,z1+.05);scene.add(trim);
     const trim2=trim.clone();trim2.position.z=z2-.05;scene.add(trim2);
-    colliders.push({min:V3(x1,y,z1),max:V3(x2,y+.25,z2)});
+    colliders.push({min:V3(x1,y,z1),max:V3(x2,y+2.6,z2)});   // 碰撞体加高：屋顶不可站立
   }
 
   // 周围环境装饰（地图边界外：城镇建筑、树木、远山）

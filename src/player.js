@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=12';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=12';
-import { SKINS } from './config.js?v=12';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=12';
-import { useAbility } from './abilities.js?v=12';
-import { tracer, spawnSmoke } from './effects.js?v=12';
-import { sfx } from './audio.js?v=12';
+import { G, sens } from './state.js?v=13';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=13';
+import { SKINS } from './config.js?v=13';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=13';
+import { useAbility } from './abilities.js?v=13';
+import { tracer, spawnSmoke } from './effects.js?v=13';
+import { sfx } from './audio.js?v=13';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -20,11 +20,21 @@ export const playerView = P;
 let vmGroup = null, vmGun = null;
 
 export function initPlayerInput(){
+  // Pointer Lock 已知浏览器 bug：偶发超大 movementX/Y 尖峰导致视角猛跳。
+  // 过滤：突然出现且远大于上一帧的超大位移视为坏数据，用上一帧值代替。
+  let lastMX = 0, lastMY = 0;
+  const despike = (v, last)=>{
+    if(Math.abs(v) > 200 && Math.abs(v) > Math.abs(last)*4 + 120) return last;
+    return clamp(v, -400, 400);
+  };
   window.addEventListener('mousemove', e=>{
     if(!G.locked || !G.player?.alive) return;
+    const mx = despike(e.movementX, lastMX);
+    const my = despike(e.movementY, lastMY);
+    lastMX = mx; lastMY = my;
     const s = sens() * (G.player.ads && curWeapon(G.player).def.ads.scope ? .35 : 1);
-    G.player.yaw -= e.movementX * s;
-    G.player.pitch = clamp(G.player.pitch - e.movementY * s, -1.55, 1.55);
+    G.player.yaw -= mx * s;
+    G.player.pitch = clamp(G.player.pitch - my * s, -1.55, 1.55);
   });
   window.addEventListener('mousedown', e=>{
     if(!G.locked) return;
@@ -42,6 +52,8 @@ export function initPlayerInput(){
     const p = G.player;
     if(e.code==='Tab'){ e.preventDefault(); G.hooks.showBoard?.(true); }
     if(!p.alive) return;
+    // 天穹战术地图打开时：E/Esc/其他技能键关闭地图
+    if(G.hooks.smokeMapKey?.(e.code)) return;
     // 下烟模式中：用左键确认，其他按键取消
     if(G.smokeMode && G.smokeMode.agent === p && !G.mouse.lmb){
       if(e.code==='KeyC'||e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyX'||
@@ -262,15 +274,18 @@ export function updatePlayer(dt){
   // interact (plant/defuse)
   G.hooks.interactTick?.(p, dt);
 
-  // 下烟模式（天穹/暗幕）：瞄准指针+左键投放
+  // 下烟模式（暗幕 · 原版幽影式）：瞄准指针可越过墙体投至远处地面，左键投放
   if(G.smokeMode){
     const sm = G.smokeMode;
-    if(G.now > sm.until){ G.smokeMode = null; }
+    if(G.now > sm.until){ cancelSmokeMode(); }
     else {
       const dir = dirFromYawPitch(p.yaw, p.pitch);
       const o = eyePos(p);
-      const maxD = 60;
-      const d = Math.min(rayWalls(o, dir, maxD), maxD);
+      const maxD = 45;
+      // 无视墙体：向下瞄时投影到地面交点，平视/上瞄时按视角距离推远
+      let d;
+      if(dir.y < -0.04) d = clamp(-o.y/dir.y, 4, maxD);
+      else d = clamp(maxD * (1 - dir.y*1.4), 10, maxD);
       const pt = o.clone().addScaledVector(dir, d); pt.y = 0;
       if(!sm.ring){
         sm.ring = new THREE.Mesh(new THREE.RingGeometry(4.3,4.5,32),
@@ -296,8 +311,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=12';
-import { raySphere } from './utils.js?v=12';
+import { hitSpheres } from './combat.js?v=13';
+import { raySphere } from './utils.js?v=13';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
@@ -352,7 +367,7 @@ function updateCamera(p, dt){
   if(p.grounded && hspd>1) P.bobT += dt*hspd*1.7; 
   cam.rotation.order = 'YXZ';
   const visRecoil = deg(P.recoilPitch*.01)*.5;
-  cam.rotation.y = p.yaw + deg(P.recoilYaw*.01)*.08; // was .3, excessive wobble
+  cam.rotation.y = p.yaw;                 // 不再叠加水平后座晃动，视角只随鼠标转动
   cam.rotation.x = p.pitch + visRecoil;
   cam.rotation.z = 0;
 
