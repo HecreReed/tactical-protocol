@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=18";
-import { V3, rayAABB, dist2d } from "./utils.js?v=18";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=18";
+import { G } from "./state.js?v=19";
+import { V3, rayAABB, dist2d } from "./utils.js?v=19";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=19";
 const HALF = WORLD/2;   // 55
 const OLD_MAPS = [
   {
@@ -628,6 +628,7 @@ const OLD_MAPS = [
 ];
 
 export const MAPS = NEW_MAPS;
+export { WORLD };
 
 const inRect = (x,z,r)=> x>=r[0]&&x<=r[2]&&z>=r[1]&&z<=r[3];
 
@@ -955,11 +956,11 @@ function addEnvironment(scene, md){
     new THREE.MeshStandardMaterial({map:winTex,color:new THREE.Color(md.wallTone).offsetHSL(.02,.03,.05),roughness:.92}),
   ];
   const roofMat=new THREE.MeshStandardMaterial({color:0x33302c,roughness:.95});
-  // 环形建筑群
+  // 环形建筑群（永远在战场边界之外）
   const N=34;
   for(let i=0;i<N;i++){
     const ang=i/N*Math.PI*2+rnd()*.16;
-    const rad=54+rnd()*24;
+    const rad=HALF+16+rnd()*26;
     const w=5+rnd()*9,d=5+rnd()*9,h=5+rnd()*15;
     const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
     const m=new THREE.Mesh(boxGeo,bMats[i%3]);
@@ -976,7 +977,7 @@ function addEnvironment(scene, md){
   const leafMat2=new THREE.MeshStandardMaterial({color:0x3a6b42,roughness:.95});
   for(let i=0;i<24;i++){
     const ang=i/24*Math.PI*2+rnd()*.3;
-    const rad=45+rnd()*9;
+    const rad=HALF+5+rnd()*10;
     const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
     const s=.8+rnd()*.7;
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,1.6*s,5),trunkMat);
@@ -990,7 +991,7 @@ function addEnvironment(scene, md){
   const mtnMat=new THREE.MeshBasicMaterial({color:new THREE.Color(md.sky.fog).offsetHSL(0,0,-.12)});
   for(let i=0;i<9;i++){
     const ang=i/9*Math.PI*2+rnd()*.4;
-    const rad=95+rnd()*30;
+    const rad=HALF+70+rnd()*40;
     const h=22+rnd()*26,r=26+rnd()*22;
     const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,5),mtnMat);
     m.position.set(Math.cos(ang)*rad,h/2-4,Math.sin(ang)*rad);
@@ -1007,7 +1008,7 @@ export function buildMap(scene, mapId){
   const colliders = [];
 
   // 天空 + 雾
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(220,32,16),
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(300,32,16),
     new THREE.MeshBasicMaterial({map:skyTexture(md),side:THREE.BackSide,depthWrite:false,fog:false})));
   scene.fog = new THREE.Fog(md.sky.fog, 45, md.sky.fogFar + 25);
   scene.background = new THREE.Color(md.sky.mid);

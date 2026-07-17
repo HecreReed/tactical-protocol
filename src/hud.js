@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=18';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=18';
-import { MAPS, inAnyOpen, snapToNav } from './map.js?v=18';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=18';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=18';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=18';
-import { buyAbility, sellAbility } from './abilities.js?v=18';
-import { spawnSmoke, targetRing } from './effects.js?v=18';
-import { abilityIcon } from './icons.js?v=18';
-import { sfx, setVolume } from './audio.js?v=18';
+import { G, saveSettings } from './state.js?v=19';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=19';
+import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=19';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=19';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=19';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=19';
+import { buyAbility, sellAbility } from './abilities.js?v=19';
+import { spawnSmoke, targetRing } from './effects.js?v=19';
+import { abilityIcon } from './icons.js?v=19';
+import { sfx, setVolume } from './audio.js?v=19';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -134,7 +134,7 @@ function smokeMapKey(code){
 }
 function drawSmokeMap(){
   const c = els.smokeMapCanvas, g = c.getContext('2d');
-  const k = 460/110, off = 55;
+  const k = 460/WORLD, off = WORLD/2;
   g.clearRect(0,0,460,460);
   g.drawImage(mmStatic, 0,0,230,230, 0,0,460,460);
   // 已存在的烟雾
@@ -171,7 +171,7 @@ function smokeMapClick(e){
   const slot = ent.ab[sMap.key];
   if(sMap.mode!=='tp' && slot.n <= 0){ closeSmokeMap(); return; }
   const rect = els.smokeMapCanvas.getBoundingClientRect();
-  const k = 460/110, off = 55;
+  const k = 460/WORLD, off = WORLD/2;
   const wx = (e.clientX - rect.left) * (460/rect.width) / k - off;
   const wz = (e.clientY - rect.top) * (460/rect.height) / k - off;
   if(!inAnyOpen(wx, wz)){ sfx.deny(); return; }
@@ -500,7 +500,7 @@ export function renderMinimapStatic(){
   const g = mmStatic.getContext('2d');
   g.fillStyle = '#0c141c';
   g.fillRect(0,0,230,230);
-  const k = 230/110, off = 55;
+  const k = 230/WORLD, off = WORLD/2;
   g.fillStyle = '#26333d';
   for(const b of G.map.walls){
     g.fillRect((b.min.x+off)*k, (b.min.z+off)*k, (b.max.x-b.min.x)*k, (b.max.z-b.min.z)*k);
@@ -525,7 +525,7 @@ function drawMinimap(){
   const c = els.minimap, g = c.getContext('2d');
   g.clearRect(0,0,230,230);
   g.drawImage(mmStatic,0,0);
-  const k = 230/110, off = 55;
+  const k = 230/WORLD, off = WORLD/2;
   const P = pos => [(pos.x+off)*k, (pos.z+off)*k];
   const m = G.match;
 

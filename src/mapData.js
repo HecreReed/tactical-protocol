@@ -39,7 +39,7 @@ function makeMap({id,name,desc,sky,wallTone,accent,rooms,corridors,sites,spawns,
   let open=[];
   for(const r of rooms) open.push(r);
   for(const c of corridors) open=open.concat(c);
-  return {id,name,desc,sky,wallTone,accent,open,
+  return {id,name,desc,sky,wallTone,accent,open,roomRects:rooms,
     innerWalls:innerWalls||[], roofs:roofs||[], platforms:platforms||[], stairs:stairs||[], bridges:bridges||[],
     crates:crates||[],sites,wps:[],extraEdges:[],stages,defPostList,atkHolds,smokePoints,chokes,spawns,barriers};
 }
@@ -1030,7 +1030,7 @@ function spawnSets(){
 // ============================================================
 // 全地图等比放大：世界 84x84 → 110x110（高度不变），路线更长更有纵深
 // ============================================================
-const K = 1.3;
+const K = 1.65;
 const sc = v => Math.round(v * K * 100) / 100;
 for(const m of MAPS){
   for(const r of m.open){ r[0]=sc(r[0]); r[1]=sc(r[1]); r[2]=sc(r[2]); r[3]=sc(r[3]); }
@@ -1058,9 +1058,59 @@ for(const m of MAPS){
   for(const k of Object.keys(m.chokes||{})) m.chokes[k]=[sc(m.chokes[k][0]),sc(m.chokes[k][1])];
   m.spawns.atk = m.spawns.atk.map(p=>[sc(p[0]),sc(p[1])]);
   m.spawns.def = m.spawns.def.map(p=>[sc(p[0]),sc(p[1])]);
-  m.sky.fogFar = Math.round(m.sky.fogFar * 1.3);
+  m.sky.fogFar = Math.round(m.sky.fogFar * 1.7);
+  for(const r of (m.roomRects||[])){ r[0]=r[0]; }   // roomRects 与 open 前段共享引用，已随 open 缩放
 }
 
-export const WORLD = 110;
+// ============================================================
+// 自动战场复杂化：在每个房间内程序化布置掩体阵（箱堆/立柱/矮墙）
+// 规则：避开出生房、包点下包位、驻守位、楼梯/高台/桥/建筑，走廊不放（保证连通）
+// ============================================================
+function mulberry(seedStr){
+  let h = 1779033703;
+  for(const ch of seedStr) h = Math.imul(h ^ ch.charCodeAt(0), 3432918353);
+  return ()=>{ h = Math.imul(h ^ (h>>>16), 2246822507); h = Math.imul(h ^ (h>>>13), 3266489909); return ((h ^= h>>>16) >>> 0) / 4294967296; };
+}
+for(const m of MAPS){
+  const rng = mulberry(m.id + 'detail');
+  const rooms = m.roomRects || [];
+  const avoidPts = [];
+  for(const k of Object.keys(m.sites)) avoidPts.push([...m.sites[k].plant, 3.2]);
+  for(const p of m.defPostList) avoidPts.push([p.p[0], p.p[1], 2.6]);
+  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]) avoidPts.push([h.p[0], h.p[1], 2.4]);
+  for(const k of Object.keys(m.stages||{})) avoidPts.push([m.stages[k][0], m.stages[k][1], 2.4]);
+  for(const sp of m.spawns.atk) avoidPts.push([sp[0], sp[1], 2.6]);
+  for(const sp of m.spawns.def) avoidPts.push([sp[0], sp[1], 2.6]);
+  const solidRects = [];
+  for(const w of m.innerWalls) solidRects.push([w[0]-1, w[1]-1, w[2]+1, w[3]+1]);
+  for(const p of m.platforms) solidRects.push([p[0]-1, p[1]-1, p[2]+1, p[3]+1]);
+  for(const b of m.bridges) solidRects.push([b[0]-1, b[1]-1, b[2]+1, b[3]+1]);
+  for(const st of m.stairs) solidRects.push([st.x1-1.2, st.z1-1.2, st.x2+1.2, st.z2+1.2]);
+  const inRect2 = (x,z,r)=> x>=r[0] && x<=r[2] && z>=r[1] && z<=r[3];
+  for(let ri=2; ri<rooms.length; ri++){         // 跳过 0/1 = 双方出生房
+    const r = rooms[ri];
+    const w = r[2]-r[0], d = r[3]-r[1];
+    const area = w*d;
+    if(area < 110) continue;
+    const n = Math.min(6, Math.max(2, Math.floor(area/95)));
+    let placed = 0, tries = 0;
+    while(placed < n && tries < 40){
+      tries++;
+      const x = r[0] + 1.6 + rng()*(w-3.2);
+      const z = r[1] + 1.6 + rng()*(d-3.2);
+      if(avoidPts.some(([px,pz,pr])=> Math.hypot(x-px,z-pz) < pr + 1.4)) continue;
+      if(solidRects.some(sr=> inRect2(x,z,sr))) continue;
+      if(m.crates.some(c=> Math.hypot(x-c[0], z-c[1]) < (c[2]||1.6)/2 + 2)) continue;
+      const roll = rng();
+      if(roll < .5)      m.crates.push([+x.toFixed(1), +z.toFixed(1), 1.2+rng()*0.9, 1, 0]);
+      else if(roll < .72) m.crates.push([+x.toFixed(1), +z.toFixed(1), 1.5+rng()*0.8, 2, 1]);
+      else if(roll < .88) m.crates.push([+x.toFixed(1), +z.toFixed(1), 3.4+rng()*1.6, 1.1, 0]);   // 矮长掩体
+      else               m.crates.push([+x.toFixed(1), +z.toFixed(1), 1.1, 3, 1]);                 // 高立柱
+      placed++;
+    }
+  }
+}
+
+export const WORLD = 140;
 export { MAPS };
 export default MAPS;

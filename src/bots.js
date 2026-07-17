@@ -1,10 +1,10 @@
-import { G } from './state.js?v=18';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=18';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=18';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=18';
-import { useAbility, botCast } from './abilities.js?v=18';
-import { removeDrop } from './effects.js?v=18';
-import { sfx } from './audio.js?v=18';
+import { G } from './state.js?v=19';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=19';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=19';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=19';
+import { useAbility, botCast } from './abilities.js?v=19';
+import { removeDrop } from './effects.js?v=19';
+import { sfx } from './audio.js?v=19';
 
 const THINK_DT = .12;
 
@@ -428,7 +428,19 @@ function botAbilities(bot){
   const inCombat = !!t;
   const hurt = bot.hp < 50;
   const safeTime = G.now - bot.lastDamaged > 4;
-  const enemyChanneling = G.ents.find(e=>e.alive && e.team!==bot.team && e.channel);
+  // 公平感知：只有「看得见」或「离得近听得到」且已持续一会儿的下包/拆包才会被技能针对
+  let enemyChanneling = null;
+  {
+    const chRaw = G.ents.find(e=>e.alive && e.team!==bot.team && e.channel);
+    if(chRaw){
+      const prog = chRaw.channel==='plant' ? sp.prog : sp.defProg;
+      if(prog > .8){
+        const seen = !losBlocked(eyePos(bot), eyePos(chRaw));
+        const close = dist2d(bot.pos, chRaw.pos) < 20;
+        if(seen || close) enemyChanneling = chRaw;
+      }
+    }
+  }
   const executing = a.state==='execute';
 
   switch(bot.agent){

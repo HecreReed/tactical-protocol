@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=18';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=18';
-import { AGENTS } from './config.js?v=18';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=18';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=18';
-import { inAnyOpen } from './map.js?v=18';
-import { sfx } from './audio.js?v=18';
-import { raySphere } from './utils.js?v=18';
+import { G } from './state.js?v=19';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=19';
+import { AGENTS } from './config.js?v=19';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=19';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=19';
+import { inAnyOpen } from './map.js?v=19';
+import { sfx } from './audio.js?v=19';
+import { raySphere } from './utils.js?v=19';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -704,12 +704,20 @@ function castOrbital(ent, p){
 
 // ============ AI 定点施放接口 ============
 // AI 通过世界坐标目标点施放，不依赖视角。返回是否成功。
+const BOT_AREA_JITTER = new Set(['nade','bignade','fragNade','quake','suppressNade','acidPool','hotHands',
+  'toxicSmoke','toxicDome','cage','molly','shock','smokeSky','wallFlash','flash']);
 export function botCast(bot, key, point, target){
   if(!bot.alive) return false;
   const ph = G.match?.phase;
   if(ph !== 'live' && ph !== 'planted') return false;
   if(G.now < (bot.suppressedUntil||0)) return false;
   const slot = bot.ab[key];
+  // AI 投掷落点误差：随距离和难度扩散（玩家投不准，AI 也不该像素级精准）
+  if(point && slot && BOT_AREA_JITTER.has(slot.def.type)){
+    const D = G.match?.diff ?? .8;
+    const err = (1.1 + dist2d(bot.pos, point)*.05) * Math.max(.3, 1.7 - D);
+    point = V3(point.x + gauss()*err, point.y||0, point.z + gauss()*err);
+  }
   if(!slot) return false;
   const def = slot.def;
   const agent = AGENTS[bot.agent];
@@ -873,7 +881,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=18').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=19').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
