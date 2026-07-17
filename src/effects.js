@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=15';
-import { V3 } from './utils.js?v=15';
-import { sfx } from './audio.js?v=15';
+import { G } from './state.js?v=16';
+import { V3 } from './utils.js?v=16';
+import { sfx } from './audio.js?v=16';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -50,7 +50,7 @@ export function teleportFX(p){ const f=getFlash(0x8040d0,.55); f.mesh.position.c
 export function flashFX(p){ const f=getFlash(0xffffff,.5); f.mesh.position.copy(p); f.life=f.max=.45; f.grow=18; }
 
 // ---- smokes ----
-const smokeMat = new THREE.MeshStandardMaterial({color:0xdce2ea, roughness:1, transparent:true, opacity:.985, flatShading:false});
+const smokeMat = new THREE.MeshStandardMaterial({color:0xdce2ea, roughness:1, transparent:true, opacity:.985, flatShading:false, side:THREE.DoubleSide});
 export function spawnSmoke(pos, r, dur){
   // 主体 + 内部发光核，营造体积感
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(r*.55, 2),
@@ -87,7 +87,9 @@ export function spawnZone(type, pos, r, dur, dps, owner){
   return z;
 }
 
-export function targetRing(pos, r, dur, color=0xff4655){
+export function targetRing(pos, r, dur, color=0xff4655, owner=null){
+  // 敌方的技能落点指示环不给玩家看（避免地上出现莫名其妙的红圈）
+  if(owner && G.player && owner.team !== G.player.team) return;
   const ring = new THREE.Mesh(new THREE.RingGeometry(r*.9,r,32),
     new THREE.MeshBasicMaterial({color, transparent:true, opacity:.8, side:THREE.DoubleSide, depthWrite:false}));
   ring.rotation.x = -Math.PI/2;

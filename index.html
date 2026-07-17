@@ -101,10 +101,36 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #scope::before,#scope::after{content:"";position:absolute;background:rgba(0,0,0,.8)}
 #scope::before{left:0;right:0;top:50%;height:1px}
 #scope::after{top:0;bottom:0;left:50%;width:1px}
-#teamBar{position:absolute;top:8px;left:260px;display:flex;flex-direction:column;gap:3px}
-.tm{display:flex;gap:8px;align-items:center;font-size:11px;background:var(--panel);padding:2px 8px;border-left:2px solid var(--teal);min-width:150px}
+#teamBar{position:absolute;top:8px;left:260px;display:flex;flex-direction:column;gap:3px;max-height:70vh;overflow:hidden}
+.tm{display:flex;gap:8px;align-items:center;font-size:11px;background:var(--panel);padding:2px 8px;border-left:2px solid var(--teal);min-width:190px}
+.tm.foe{border-left-color:var(--red)}
 .tm.dead{opacity:.35;border-left-color:#444}
-.tm .hp{color:var(--dim);margin-left:auto}
+.tm .hp{color:var(--dim);margin-left:4px;width:24px;text-align:right}
+.tm .hpbar{flex:1;height:4px;background:#24333f;margin-left:auto;min-width:50px}
+.tm .hpbar i{display:block;height:100%;background:var(--teal);max-width:100%}
+.tm.foe .hpbar i{background:var(--red)}
+
+/* ---------- 战斗报告（无畏契约式） ---------- */
+#combatReport{position:absolute;right:12px;top:170px;width:250px;background:var(--panel);border-right:3px solid var(--gold);padding:10px 12px;font-size:12px}
+#combatReport h3{font-size:11px;letter-spacing:3px;color:var(--gold);margin-bottom:8px}
+.crRow{display:flex;align-items:center;gap:6px;padding:3px 0;border-top:1px solid #1d2a35}
+.crName{flex:1;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crNums{color:var(--dim)}
+.crNums b.give{color:var(--teal)} .crNums b.take{color:var(--red)}
+.crNums i{font-style:normal;font-size:10px;color:var(--dim)}
+.crk{color:var(--teal);font-size:10px} .crd{color:var(--red);font-size:10px}
+.crLegend{margin-top:6px;font-size:10px;color:var(--dim);text-align:right}
+
+/* ---------- 烟雾内视野遮罩 ---------- */
+#smokeFog{position:fixed;inset:0;pointer-events:none;z-index:11;opacity:0;transition:opacity .12s;
+  background:radial-gradient(ellipse at center, rgba(216,222,230,.99) 0%, rgba(198,206,216,.99) 60%, rgba(180,190,202,1) 100%)}
+
+/* ---------- 两步选择 ---------- */
+.stepBtns{display:flex;justify-content:center;align-items:center;margin-top:16px}
+.stepBtns button{padding:11px 34px;font-size:15px;letter-spacing:3px;background:var(--red);border:0;color:#fff;font-weight:700;cursor:pointer;border-radius:4px}
+.stepBtns button.ghost{background:#131e29;border:1px solid #24333f;color:var(--dim)}
+.stepBtns button.ghost:hover{color:var(--white);border-color:var(--teal)}
+#stepMaps,#stepAgents{display:flex;flex-direction:column;align-items:center}
 
 /* ---------- Buy menu ---------- */
 #buyMenu{position:fixed;inset:6% 8%;background:rgba(10,17,24,.96);border:1px solid #24333f;z-index:20;padding:22px 30px;overflow-y:auto;pointer-events:auto}
@@ -222,6 +248,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
     </div>
   </div>
   <div id="spikeTag" class="hidden">SPIKE 已安放</div>
+  <div id="combatReport" class="hidden"></div>
   <div id="minimapBox"><canvas id="minimap" width="230" height="230"></canvas></div>
   <div id="teamBar"></div>
   <div id="killfeed"></div>
@@ -268,11 +295,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 <div id="agentSelect" class="overlay">
   <span id="gearBtn">⚙ 设置</span>
   <h1>TACTICAL <span>PROTOCOL</span></h1>
-  <div class="sub">选择地图 · 难度 · 特工 — 5v5 炸弹模式 · 先赢 13 回合</div>
-  <div id="mapCards"></div>
-  <div id="diffBtns"></div>
-  <div id="agentCards"></div>
-  <div class="sub" style="margin-top:22px">WASD 移动 · Shift 静步 · Ctrl 蹲 · 左键开火 · 右键瞄准 · R 换弹 · B 购买 · C/Q/E 技能 · X 大招 · F 安放/拆除 · Tab 计分板</div>
+  <div class="sub" id="selectSub">第 1 步 · 选择地图与难度</div>
+  <div id="stepMaps">
+    <div id="mapCards"></div>
+    <div id="diffBtns"></div>
+    <div class="stepBtns"><button id="toAgents">下一步 · 选择特工 →</button></div>
+  </div>
+  <div id="stepAgents" class="hidden">
+    <div id="agentCards"></div>
+    <div class="stepBtns"><button id="backMaps" class="ghost">← 返回选图</button></div>
+  </div>
+  <div class="sub" style="margin-top:22px">WASD 移动 · Shift 静步 · Ctrl 蹲 · 左键开火 · 右键瞄准 · R 换弹 · B 购买 · C/Q/E 技能 · X 大招 · F 安放/拆除/拾取 · Tab 计分板</div>
 </div>
 
 <div id="lockHint" class="hidden">
@@ -298,6 +331,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <div id="smokeMapInfo"></div>
 </div>
 
+<div id="smokeFog"></div>
+
 <div id="flashOverlay"></div>
 
 <div id="endScreen" class="overlay hidden">
@@ -306,6 +341,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <button onclick="location.reload()">再 来 一 局</button>
 </div>
 
-<script type="module" src="./src/main.js?v=15"></script>
+<script type="module" src="./src/main.js?v=16"></script>
 </body>
 </html>

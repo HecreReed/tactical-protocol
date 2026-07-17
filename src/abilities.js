@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=15';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=15';
-import { AGENTS } from './config.js?v=15';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=15';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=15';
-import { inAnyOpen } from './map.js?v=15';
-import { sfx } from './audio.js?v=15';
-import { raySphere } from './utils.js?v=15';
+import { G } from './state.js?v=16';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=16';
+import { AGENTS } from './config.js?v=16';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=16';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=16';
+import { inAnyOpen } from './map.js?v=16';
+import { sfx } from './audio.js?v=16';
+import { raySphere } from './utils.js?v=16';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -366,7 +366,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       }
       // bot / 非玩家：直接瞄点投放
       const p = aimPoint(ent, 60);
-      targetRing(p, 4.5, 1200);
+      targetRing(p, 4.5, 1200, 0xff4655, ent);
       setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
       if(key==='e') ent.abCd.e = G.now + def.cd;
       sfx.ability();
@@ -680,7 +680,7 @@ export function botCast(bot, key, point, target){
       return useAbility(bot, key);
     case 'nade': case 'bignade': case 'fragNade': {
       const p = V3(point.x, 0, point.z);
-      targetRing(p, 3, 700, 0xffa040);
+      targetRing(p, 3, 700, 0xffa040, bot);
       const big = def.type==='bignade';
       setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted')
         boomAt(p, big?4:3.2, big?75:50, big?35:22, bot, def.name); }, 700);
@@ -749,7 +749,7 @@ export function botCast(bot, key, point, target){
     }
     case 'suppressNade': {
       const p = V3(point.x, .8, point.z);
-      targetRing(V3(p.x,0,p.z), 5.5, 700, 0xb478ff);
+      targetRing(V3(p.x,0,p.z), 5.5, 700, 0xb478ff, bot);
       setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popSuppress(p, 5.5, 5, bot); }, 700);
       break;
     }
@@ -762,7 +762,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=15').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=16').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -785,6 +785,22 @@ export function buyAbility(ent, key){
   if(ent.money < def.cost) return false;
   ent.money -= def.cost;
   slot.n++;
+  const r = G.match?.round || 0;
+  if(slot.boughtRound !== r){ slot.boughtRound = r; slot.boughtN = 0; }
+  slot.boughtN++;
+  return true;
+}
+
+// 右键出售本回合购买的技能（复刻无畏契约）
+export function sellAbility(ent, key){
+  const m = G.match;
+  if(!m || m.phase!=='buy') return false;
+  const slot = ent.ab[key];
+  const def = slot.def;
+  if(slot.boughtRound !== m.round || !(slot.boughtN > 0) || slot.n <= 0 || def.cost <= 0) return false;
+  slot.n--;
+  slot.boughtN--;
+  ent.money = Math.min(9000, ent.money + def.cost);
   return true;
 }
 

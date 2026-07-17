@@ -12,6 +12,8 @@ export const G = {
   traps: [],          // 绊网 {pos,team,owner,mesh,until}
   drops: [],          // 掉落武器 {w,pos,mesh}
   castMode: null,     // 装备式施法 {ent,key,def,slot,kind,until}
+  report: null,       // 本回合战斗报告 {dealt:{},taken:{}}
+  lastReport: null,   // 上回合战斗报告（购买阶段显示）
   corpses: [],
   projectiles: [],
   map: null,

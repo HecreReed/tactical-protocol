@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=15';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=15';
-import { MAPS, inAnyOpen } from './map.js?v=15';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=15';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=15';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, sideOf } from './game.js?v=15';
-import { buyAbility } from './abilities.js?v=15';
-import { spawnSmoke, targetRing } from './effects.js?v=15';
-import { abilityIcon } from './icons.js?v=15';
-import { sfx, setVolume } from './audio.js?v=15';
+import { G, saveSettings } from './state.js?v=16';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=16';
+import { MAPS, inAnyOpen } from './map.js?v=16';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=16';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=16';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=16';
+import { buyAbility, sellAbility } from './abilities.js?v=16';
+import { spawnSmoke, targetRing } from './effects.js?v=16';
+import { abilityIcon } from './icons.js?v=16';
+import { sfx, setVolume } from './audio.js?v=16';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -39,6 +39,8 @@ export function initHUD(){
     flashOverlay: $('flashOverlay'),
     settingsMenu: $('settingsMenu'),
     smokeMap: $('smokeMap'), smokeMapCanvas: $('smokeMapCanvas'), smokeMapInfo: $('smokeMapInfo'),
+    combatReport: $('combatReport'), smokeFog: $('smokeFog'),
+    stepMaps: $('stepMaps'), stepAgents: $('stepAgents'), selectSub: $('selectSub'),
   };
 
   G.hooks.killfeed = killfeed;
@@ -243,8 +245,16 @@ function closeSettings(){
   els.settingsMenu.classList.add('hidden');
 }
 
-// ---------- 开局选择 ----------
+// ---------- 开局选择（两步式：先选图 → 再选特工） ----------
 export function showAgentSelect(cb){
+  const toStep = (n)=>{
+    els.stepMaps.classList.toggle('hidden', n!==1);
+    els.stepAgents.classList.toggle('hidden', n!==2);
+    if(els.selectSub) els.selectSub.textContent = n===1 ? '第 1 步 · 选择地图与难度' : '第 2 步 · 选择你的特工';
+  };
+  $('toAgents').onclick = ()=> toStep(2);
+  $('backMaps').onclick = ()=> toStep(1);
+  toStep(1);
   // 地图
   let mapSel = MAPS[0].id;
   els.mapCards.innerHTML = '';
@@ -292,11 +302,11 @@ export function showAgentSelect(cb){
     };
     els.agentCards.appendChild(card);
   }
-  // 观战模式按钮
+  // 观战模式按钮（第 1 步即可观战）
   const obsBtn = document.createElement('button');
   obsBtn.className = 'obsBtn';
   obsBtn.textContent = '🎥 观战模式（只看 AI 对战）';
-  obsBtn.style.cssText = 'margin-top:14px;padding:10px 22px;font-size:15px;background:#1a2a36;border:1px solid #39d0c9;color:#39d0c9;border-radius:6px;cursor:pointer;';
+  obsBtn.style.cssText = 'margin-left:12px;padding:10px 22px;font-size:14px;background:#1a2a36;border:1px solid #39d0c9;color:#39d0c9;border-radius:6px;cursor:pointer;';
   obsBtn.onmouseenter = ()=> obsBtn.style.background='#223644';
   obsBtn.onmouseleave = ()=> obsBtn.style.background='#1a2a36';
   obsBtn.onclick = ()=>{
@@ -304,7 +314,7 @@ export function showAgentSelect(cb){
     els.hud.classList.remove('hidden');
     cb(mapSel, null, true);
   };
-  els.agentCards.parentElement.appendChild(obsBtn);
+  $('toAgents').parentElement.appendChild(obsBtn);
 }
 
 // ---------- buy ----------
@@ -345,15 +355,18 @@ function buildBuyMenu(){
   });
 
   const a = AGENTS[p.agent];
+  const armorSellable = p.armorPurchase && p.armorPurchase.round===m.round && p.armorPurchase.spent>0;
+  const armorCls = (owned)=> owned ? (armorSellable?'owned sellable':'owned') : '';
   let rhtml = `<div class="bcat"><h3>护甲</h3><div class="bgrid">
-    <div class="bitem ${p.armorMax>=25?'owned':p.money<L_ARMOR_COST?'noafford':''}" data-a="l"><div class="nm">轻型护甲 +25</div><div class="pr">¥ ${L_ARMOR_COST}</div></div>
-    <div class="bitem ${p.armorMax>=50?'owned':p.money<H_ARMOR_COST?'noafford':''}" data-a="h"><div class="nm">重型护甲 +50</div><div class="pr">¥ ${H_ARMOR_COST}</div></div>
+    <div class="bitem ${p.armor>=25?armorCls(true):p.money<L_ARMOR_COST?'noafford':''}" data-a="l"><div class="nm">轻型护甲 +25</div><div class="pr">¥ ${L_ARMOR_COST}</div></div>
+    <div class="bitem ${p.armor>=50?armorCls(true):p.money<H_ARMOR_COST?'noafford':''}" data-a="h"><div class="nm">重型护甲 +50</div><div class="pr">¥ ${H_ARMOR_COST}</div></div>
   </div></div>`;
   rhtml += `<div class="bcat"><h3>技能 — ${a.name}</h3><div class="bgrid">`;
   for(const k of ['c','q']){
     const ab = p.ab[k], d = ab.def;
     const full = ab.n >= d.max;
-    rhtml += `<div class="bitem abitem ${full?'owned':p.money<d.cost?'noafford':''}" data-ab="${k}">
+    const abSellable = ab.boughtRound===m.round && ab.boughtN>0 && ab.n>0;
+    rhtml += `<div class="bitem abitem ${full?'owned':p.money<d.cost?'noafford':''} ${abSellable?'sellable':''}" data-ab="${k}">
       <div class="nm">${abilityIcon(d)}[${k.toUpperCase()}] ${d.name} (${ab.n}/${d.max})</div><div class="pr">¥ ${d.cost}</div></div>`;
   }
   rhtml += `</div></div>
@@ -364,9 +377,11 @@ function buildBuyMenu(){
   els.buyRight.innerHTML = rhtml;
   els.buyRight.querySelectorAll('[data-a]').forEach(el=>{
     el.onclick = ()=>{ if(tryBuyArmor(el.dataset.a==='h')) buildBuyMenu(); };
+    el.oncontextmenu = (e)=>{ e.preventDefault(); if(trySellArmor()) buildBuyMenu(); };
   });
   els.buyRight.querySelectorAll('[data-ab]').forEach(el=>{
     el.onclick = ()=>{ if(buyAbility(G.player, el.dataset.ab)){ sfx.buy(); buildBuyMenu(); } else sfx.deny(); };
+    el.oncontextmenu = (e)=>{ e.preventDefault(); if(sellAbility(G.player, el.dataset.ab)){ sfx.buy(); buildBuyMenu(); } else sfx.deny(); };
   });
 }
 
@@ -560,9 +575,55 @@ function drawMinimap(){
 }
 
 // ---------- per-frame ----------
+let crCache = '';
+function renderCombatReport(show){
+  if(!els.combatReport) return;
+  if(!show || !G.lastReport){
+    els.combatReport.classList.add('hidden');
+    crCache = '';
+    return;
+  }
+  const R = G.lastReport;
+  const ids = new Set([...Object.keys(R.dealt), ...Object.keys(R.taken)]);
+  if(!ids.size){ els.combatReport.classList.add('hidden'); return; }
+  const sig = JSON.stringify([R.dealt, R.taken]);
+  if(sig === crCache && !els.combatReport.classList.contains('hidden')) return;
+  crCache = sig;
+  let html = '<h3>上回合战斗报告</h3>';
+  for(const id of ids){
+    const d = R.dealt[id], t = R.taken[id];
+    const name = (d||t).name, agent = (d||t).agent;
+    const em = AGENTS[agent]?.emoji || '';
+    const mark = d?.killed ? '<span class="crk">✖ 击杀</span>' : (t?.killedMe ? '<span class="crd">☠ 阵亡</span>' : '');
+    html += `<div class="crRow">
+      <span class="crName">${em} ${name}</span>${mark}
+      <span class="crNums"><b class="give">${d?d.dmg:0}</b><i>/${d?d.hits:0}发</i> · <b class="take">${t?t.dmg:0}</b><i>/${t?t.hits:0}发</i></span>
+    </div>`;
+  }
+  html += '<div class="crLegend">给予伤害 · 承受伤害</div>';
+  els.combatReport.innerHTML = html;
+  els.combatReport.classList.remove('hidden');
+}
+
 export function updateHUD(){
   const m = G.match, p = G.player;
   if(!m) return;
+
+  // 站在烟雾里：全屏烟雾遮罩（修复烟内能看到外面的 bug）
+  if(els.smokeFog){
+    let inSmoke = false;
+    if(p && p.alive){
+      const ex = p.pos.x, ey = p.pos.y + (p.crouch?1.15:1.55), ez = p.pos.z;
+      for(const s of G.smokes){
+        const dx = ex-s.pos.x, dy = ey-s.pos.y, dz = ez-s.pos.z;
+        if(dx*dx+dy*dy+dz*dz < (s.r*.92)*(s.r*.92)){ inSmoke = true; break; }
+      }
+    }
+    els.smokeFog.style.opacity = inSmoke ? .97 : 0;
+  }
+
+  // 战斗报告：购买阶段显示上回合数据（无畏契约式）
+  renderCombatReport(m.phase === 'buy' && !!p);
 
   // 天穹战术地图：死亡/回合结束自动收起，打开时实时刷新
   if(sMap.open){
@@ -685,12 +746,21 @@ function renderAbilities(p, aDef){
 
 let tbCache = '';
 function renderTeamBar(){
-  const allies = G.ents.filter(e=>e.team==='ally' && !e.isPlayer);
-  const sig = allies.map(e=>`${e.name}${e.alive}${Math.ceil(e.hp)}`).join();
+  // 观战模式（无玩家）显示双方全员血量；正常模式显示己方队友血量
+  const rows = [];
+  if(!G.player){
+    for(const e of G.ents){
+      rows.push({e, enemy: e.team==='enemy'});
+    }
+  } else {
+    for(const e of G.ents) if(e.team==='ally' && !e.isPlayer) rows.push({e, enemy:false});
+  }
+  const sig = rows.map(r=>`${r.e.name}${r.e.alive}${Math.ceil(r.e.hp)}${r.enemy}`).join();
   if(sig===tbCache) return;
   tbCache = sig;
-  els.teamBar.innerHTML = allies.map(e=>
-    `<div class="tm ${e.alive?'':'dead'}"><span>${AGENTS[e.agent].emoji}</span><span>${e.name}</span>
+  els.teamBar.innerHTML = rows.map(({e,enemy})=>
+    `<div class="tm ${e.alive?'':'dead'} ${enemy?'foe':''}"><span>${AGENTS[e.agent].emoji}</span><span>${e.name}</span>
+     <span class="hpbar"><i style="width:${e.alive?Math.ceil(e.hp):0}%"></i></span>
      <span class="hp">${e.alive?Math.ceil(e.hp):'☠'}</span></div>`).join('');
 }
 

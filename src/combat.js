@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=15';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=15';
-import { WIDE } from './config.js?v=15';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=15';
-import { sfx } from './audio.js?v=15';
+import { G } from './state.js?v=16';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=16';
+import { WIDE } from './config.js?v=16';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=16';
+import { sfx } from './audio.js?v=16';
 
 let nextId = 1;
 
@@ -22,6 +22,7 @@ export function makeEnt({name, team, agent, isPlayer=false}){
     money: 800, kills: 0, deaths: 0, ult: 0,
     weapons: { primary: null, secondary: makeWeapon('classic'), knife: makeWeapon('knife') },
     slot: 'secondary',
+    scopeToggle: false,
     ab: {}, abCd: {},
     channel: null,           // 'plant' | 'defuse'
     knifeUlt: 0, arrowUlt: 0, rocketUlt: 0,
@@ -167,9 +168,22 @@ export function applyDamage(target, dmg, killer, weaponName, part){
   if(!target.alive) return;
   if(target.resistUntil > G.now) dmg *= .55;
   const absorb = Math.min(target.armor, dmg * .66);
+  const hpBefore = target.hp;
   target.armor -= Math.floor(absorb);
   target.hp -= Math.round(dmg - absorb);
   target.lastDamaged = G.now;
+  // 战斗报告（无畏契约式）：记录玩家给予/承受伤害
+  const R = G.report;
+  if(R && killer && killer !== target){
+    const applied = Math.round(hpBefore - Math.max(0, target.hp));
+    if(killer.isPlayer && !target.isPlayer){
+      const r = R.dealt[target.id] || (R.dealt[target.id] = {name:target.name, agent:target.agent, dmg:0, hits:0, killed:false});
+      r.dmg += applied; r.hits++;
+    } else if(target.isPlayer && !killer.isPlayer){
+      const r = R.taken[killer.id] || (R.taken[killer.id] = {name:killer.name, agent:killer.agent, dmg:0, hits:0, killedMe:false});
+      r.dmg += applied; r.hits++;
+    }
+  }
   if(target.isPlayer){ G.hooks.damaged?.(killer); sfx.hurt(); }
   if(target.hp <= 0){
     target.hp = 0;
@@ -178,6 +192,16 @@ export function applyDamage(target, dmg, killer, weaponName, part){
 }
 
 export function killEnt(target, killer, weaponName, part){
+  const R = G.report;
+  if(R && killer && killer !== target){
+    if(killer.isPlayer && !target.isPlayer){
+      const r = R.dealt[target.id] || (R.dealt[target.id] = {name:target.name, agent:target.agent, dmg:0, hits:0, killed:false});
+      r.killed = true;
+    } else if(target.isPlayer && !killer.isPlayer){
+      const r = R.taken[killer.id] || (R.taken[killer.id] = {name:killer.name, agent:killer.agent, dmg:0, hits:0, killedMe:false});
+      r.killedMe = true;
+    }
+  }
   target.alive = false;
   target.deaths++;
   target.ult = Math.min(9, target.ult + 1);
@@ -303,7 +327,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=15';
+import { AGENTS } from './config.js?v=16';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

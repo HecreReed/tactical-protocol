@@ -1,10 +1,10 @@
-import { G } from './state.js?v=15';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=15';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=15';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=15';
-import { useAbility, botCast } from './abilities.js?v=15';
-import { removeDrop } from './effects.js?v=15';
-import { sfx } from './audio.js?v=15';
+import { G } from './state.js?v=16';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=16';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=16';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=16';
+import { useAbility, botCast } from './abilities.js?v=16';
+import { removeDrop } from './effects.js?v=16';
+import { sfx } from './audio.js?v=16';
 
 const THINK_DT = .12;
 
@@ -88,8 +88,8 @@ function findTarget(bot){
     if(losBlocked(eye, te)) continue;
     const hspd = Math.hypot(e.vel.x, e.vel.z);
     if(hspd < 2.5 && d > 28 + 12*D() && Math.random() < .5 - .2*D()) continue;
-    // 优先打伤害来源
-    let score = d;
+    // 优先打伤害来源 + 残血敌人
+    let score = d * (.55 + e.hp/220);
     if(bot.lastDamaged > G.now - 2 && e.lastShotAt > G.now - 1.5) score *= .5;
     if(score < bd){ bd = score; best = e; }
   }
@@ -146,10 +146,17 @@ function followPath(bot, dt, sprint=true){
   const wp = lookaheadTarget(bot, a.path, a.pathI);
   const ty = yawTo(bot.pos, wp);
   if(!a.target){
-    // 行进扫视：推进/搜索时视线在前进方向附近来回检查角落（更像人）
-    const scanning = a.state==='advance' || a.state==='hunt' || a.state==='fetch' || a.state==='retake' || a.state==='execute';
-    const sway = scanning ? Math.sin(G.now*1.15 + bot.id*1.7)*.32 : 0;
-    bot.yaw += angDiff(bot.yaw, ty + sway) * Math.min(1, dt*8);
+    // 进点预瞄：执行进攻接近包点时，枪口预先对准架点视线方向（像人一样预瞄角落）
+    let aimY;
+    if(a.state==='execute' && a.holdLook && a.goal && dist2d(bot.pos, a.goal) < 13){
+      aimY = yawTo(bot.pos, a.holdLook);
+    } else {
+      // 行进扫视：推进/搜索时视线在前进方向附近来回检查角落（更像人）
+      const scanning = a.state==='advance' || a.state==='hunt' || a.state==='fetch' || a.state==='retake' || a.state==='execute';
+      const sway = scanning ? Math.sin(G.now*1.15 + bot.id*1.7)*.32 : 0;
+      aimY = ty + sway;
+    }
+    bot.yaw += angDiff(bot.yaw, aimY) * Math.min(1, dt*8);
     bot.pitch *= (1 - dt*4);
   }
   let spd = moveSpeed(bot) * (sprint?1:.55);
@@ -752,7 +759,8 @@ function think(bot){
       if(losBlocked(eye, te) || dist2d(bot.pos,a.target.pos) > 60){
         a.lastSeenAt = G.now; a.lastSeenPos.copy(a.target.pos);
         a.target = null; a.acqT = 0;
-        a.state = 'hunt';
+        // 携弹者不追猎（专注进点下包），其他人追击
+        if(G.match.spike?.carrier !== bot) a.state = 'hunt';
       }
     }
   }

@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=15';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=15';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=15';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=15';
-import { initAbilities, roundRefill } from './abilities.js?v=15';
-import { initBotAI, resetBotRound } from './bots.js?v=15';
-import { inSite } from './map.js?v=15';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=15';
-import { buildViewModel, switchSlot } from './player.js?v=15';
-import { sfx } from './audio.js?v=15';
+import { G } from './state.js?v=16';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=16';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=16';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=16';
+import { initAbilities, roundRefill } from './abilities.js?v=16';
+import { initBotAI, resetBotRound } from './bots.js?v=16';
+import { inSite } from './map.js?v=16';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=16';
+import { buildViewModel, switchSlot } from './player.js?v=16';
+import { sfx } from './audio.js?v=16';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];
@@ -93,6 +93,13 @@ export { sideOf };
 
 export function startRound(){
   const m = G.match;
+  // 战斗报告快照：上回合数据供购买阶段显示
+  if(G.report && (Object.keys(G.report.dealt).length || Object.keys(G.report.taken).length)){
+    G.lastReport = G.report;
+  } else if(m.round > 0 && G.report){
+    G.lastReport = null;
+  }
+  G.report = { dealt:{}, taken:{} };
   m.round++;
   m.phase = 'buy';
   m.tPhase = G.now + 30;
@@ -121,7 +128,7 @@ export function startRound(){
     const sp = side==='atk' ? atkSpawns.shift() : defSpawns.shift();
     e.pos.copy(sp.pos); e.vel.set(0,0,0);
     e.yaw = sp.yaw; e.pitch = 0;
-    e.crouch = false; e.channel = null;
+    e.crouch = false; e.channel = null; e.scopeToggle = false;
     e.slowUntil = 0; e.stimUntil = 0; e.healQueue = 0; e.dashUntil = 0;
     if(!e.alive){
       // died last round: lose weapons
@@ -158,6 +165,15 @@ export function startRound(){
 }
 
 function botBuy(e){
+  const m = G.match;
+  // 经济局判断（像人一样存钱）：没好枪且钱不够全购 → 大概率 eco 憋下一局
+  const goodPrimary = e.weapons.primary && e.weapons.primary.def.cost >= 2000;
+  if(!goodPrimary && m.round > 1 && e.money < 2300 && Math.random() < .75){
+    if(e.money >= 800 && Math.random() < .4){
+      e.money -= 400; e.armor = e.armorMax = Math.max(e.armor, 25);
+    }
+    return;
+  }
   const buy = (id)=>{
     const def = WIDE(id);
     if(e.money < def.cost) return false;
@@ -541,8 +557,25 @@ export function tryBuyArmor(heavy){
   const cost = heavy?H_ARMOR_COST:L_ARMOR_COST;
   const hp = heavy?H_ARMOR_HP:L_ARMOR_HP;
   if(p.money < cost || (p.armor >= hp)) { sfx.deny(); return false; }
+  if(!p.armorPurchase || p.armorPurchase.round !== m.round){
+    p.armorPurchase = { round: m.round, spent: 0, prevArmor: p.armor, prevMax: p.armorMax };
+  }
+  p.armorPurchase.spent += cost;
   p.money -= cost;
   p.armor = p.armorMax = hp;
+  sfx.buy();
+  return true;
+}
+// 右键出售本回合购买的护甲（全额退款并还原原有护甲值）
+export function trySellArmor(){
+  const p = G.player, m = G.match;
+  if(!p || m.phase!=='buy') return false;
+  const ap = p.armorPurchase;
+  if(!ap || ap.round !== m.round || ap.spent <= 0){ sfx.deny(); return false; }
+  p.money = Math.min(ECONOMY.max, p.money + ap.spent);
+  p.armor = ap.prevArmor;
+  p.armorMax = ap.prevMax;
+  p.armorPurchase = null;
   sfx.buy();
   return true;
 }

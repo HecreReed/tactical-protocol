@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=15';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=15';
-import { SKINS, AGENTS } from './config.js?v=15';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=15';
-import { useAbility, startCast, confirmCast, cancelCast } from './abilities.js?v=15';
-import { tracer, spawnSmoke } from './effects.js?v=15';
-import { sfx } from './audio.js?v=15';
+import { G, sens } from './state.js?v=16';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=16';
+import { SKINS, AGENTS } from './config.js?v=16';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=16';
+import { useAbility, startCast, confirmCast, cancelCast } from './abilities.js?v=16';
+import { tracer, spawnSmoke } from './effects.js?v=16';
+import { sfx } from './audio.js?v=16';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -37,6 +37,11 @@ export function initPlayerInput(){
     G.player.pitch = clamp(G.player.pitch - my * s, -1.55, 1.55);
   });
   window.addEventListener('mousedown', e=>{
+    // 狙击枪右键 = 切换开/关镜（不需要按住）
+    if(e.button===2 && G.locked && G.player?.alive && !G.castMode && !G.smokeMode){
+      const wd = curWeapon(G.player).def;
+      if(wd.ads?.scope) G.player.scopeToggle = !G.player.scopeToggle;
+    }
     if(!G.locked) return;
     if(e.button===0) G.mouse.lmb = true;
     if(e.button===2) G.mouse.rmb = true;
@@ -138,6 +143,7 @@ function updateCastRing(p, cm){
 export function switchSlot(p, slot){
   if(p.knifeUlt>0) return;
   if(slot==='primary' && !p.weapons.primary) return;
+  p.scopeToggle = false;
   if(p.slot === slot) return;
   p.slot = slot;
   const w = curWeapon(p);
@@ -239,7 +245,11 @@ export function updatePlayer(dt){
 
   p.crouch = !!G.keys['ControlLeft'] || !!G.keys['KeyZ'];
   p.walking = !!G.keys['ShiftLeft'];
-  p.ads = !G.castMode && G.mouse.rmb && curWeapon(p).def.cat!=='melee' && p.knifeUlt<=0;
+  {
+    const wd = curWeapon(p).def;
+    p.ads = !G.castMode && wd.cat!=='melee' && p.knifeUlt<=0 &&
+      (wd.ads?.scope ? p.scopeToggle : G.mouse.rmb);
+  }
 
   // movement intent
   let fx = 0, fz = 0;
@@ -409,8 +419,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=15';
-import { raySphere } from './utils.js?v=15';
+import { hitSpheres } from './combat.js?v=16';
+import { raySphere } from './utils.js?v=16';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
