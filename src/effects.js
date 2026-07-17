@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=19';
-import { V3 } from './utils.js?v=19';
-import { sfx } from './audio.js?v=19';
+import { G } from './state.js?v=20';
+import { V3 } from './utils.js?v=20';
+import { sfx } from './audio.js?v=20';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -122,7 +122,7 @@ export function spawnTurret(pos, yaw, ent){
   g.add(head, barrel, eye);
   g.position.copy(pos); g.rotation.y = yaw;
   scene.add(g);
-  const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:40, nextFire:0, mesh:g, lamp:eye, until:G.now+45 };
+  const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:125, nextFire:0, mesh:g, lamp:eye, until:G.now+45 };
   G.turrets.push(t);
   sfx.wall(G.player? pos.distanceTo(G.player.pos):0);
   return t;

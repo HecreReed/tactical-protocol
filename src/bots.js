@@ -1,10 +1,10 @@
-import { G } from './state.js?v=19';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=19';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=19';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=19';
-import { useAbility, botCast } from './abilities.js?v=19';
-import { removeDrop } from './effects.js?v=19';
-import { sfx } from './audio.js?v=19';
+import { G } from './state.js?v=20';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=20';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=20';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=20';
+import { useAbility, botCast } from './abilities.js?v=20';
+import { removeDrop } from './effects.js?v=20';
+import { sfx } from './audio.js?v=20';
 
 const THINK_DT = .12;
 
@@ -98,7 +98,7 @@ function findTarget(bot){
 
 function setPath(bot, dest){
   const a = bot.ai;
-  const raw = findPath(bot.pos, dest, 0.35);  // slight randomness for varied bot routes
+  const raw = findPath(bot.pos, dest, 0.15);  // 轻微随机让路线多样但不乱
   a.path = raw.length ? raw : [];
   if(raw.length){
     const dc = dest.clone ? dest.clone() : V3(dest.x,0,dest.z);
@@ -106,7 +106,7 @@ function setPath(bot, dest){
     a.path.push(dc);
   }
   a.pathI = 0;
-  a.repathT = G.now + 2.5;
+  a.repathT = G.now + 3.5;
 }
 
 function lookaheadTarget(bot, path, pathI){
@@ -153,7 +153,7 @@ function followPath(bot, dt, sprint=true){
     } else {
       // 行进扫视：推进/搜索时视线在前进方向附近来回检查角落（更像人）
       const scanning = a.state==='advance' || a.state==='hunt' || a.state==='fetch' || a.state==='retake' || a.state==='execute';
-      const sway = scanning ? Math.sin(G.now*1.15 + bot.id*1.7)*.32 : 0;
+      const sway = scanning ? Math.sin(G.now*1.15 + bot.id*1.7)*.2 : 0;
       aimY = ty + sway;
     }
     bot.yaw += angDiff(bot.yaw, aimY) * Math.min(1, dt*8);
@@ -396,7 +396,7 @@ function combatUpdate(bot, dt){
     if(a.burstLeft<=0) a.burstPause = G.now + rand(.12, .45 - .18*D());
     w.ammo--;
     if(bot.knifeUlt > 0) bot.knifeUlt--;
-    w.nextFire = G.now + w.def.fi * rand(1,1.12);
+    w.nextFire = G.now + w.def.fi * rand(1,1.12) * (G.now < bot.stimUntil ? .85 : 1);
     const meMoving = Math.hypot(bot.vel.x,bot.vel.z) > 1.5;
     const errDeg = (1.0 + d*.055) * errMul * (meMoving?1.6:1) * (bot.crouch ? .85 : 1) * (2.05 - D());
     const dir = dirFromYawPitch(bot.yaw, bot.pitch);
@@ -762,11 +762,11 @@ export function updateBots(dt){
     if(a.target && a.target.alive) combatUpdate(bot, dt);
     else { bot.crouch = false; navUpdate(bot, dt); }
 
-    separateBots();
     moveEntity(bot, dt);
     stuckCheck(bot, dt);
     updateBodyPose(bot);
   }
+  separateBots();   // 分离力每帧一次（此前在循环内重复执行导致互相推挤乱走）
 }
 
 function think(bot){
@@ -949,6 +949,7 @@ function thinkAttack(bot){
       break;
     }
     case 'hunt': {
+      if(dist2d(bot.pos, a.lastSeenPos) > 42){ a.state='wait'; break; }   // 太远不追
       a.goal = a.lastSeenPos.clone();
       if(needRepath(bot, a.goal)) setPath(bot, a.goal);
       if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 6) a.state='wait';
@@ -986,10 +987,13 @@ function thinkDefend(bot){
   }
 
   if(a.state==='hunt'){
-    a.goal = a.lastSeenPos.clone();
-    if(needRepath(bot, a.goal)) setPath(bot, a.goal);
-    if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 5){ a.state='post'; a.hold=null; }
-    return;
+    if(dist2d(bot.pos, a.lastSeenPos) > 38){ a.state='post'; }
+    else {
+      a.goal = a.lastSeenPos.clone();
+      if(needRepath(bot, a.goal)) setPath(bot, a.goal);
+      if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 5){ a.state='post'; a.hold=null; }
+      return;
+    }
   }
 
   if(m.rotateCall && G.now < m.rotateCall.until && !a.rotated && Math.random() < .3 + .3*D()){
@@ -1110,7 +1114,7 @@ function navUpdate(bot, dt){
     let look = a.holdLook;
     if(fresh) look = c.pos;
     if(look){
-      const sweep = fresh ? 0 : Math.sin(G.now*.55 + bot.id*2.1)*.45;
+      const sweep = fresh ? 0 : Math.sin(G.now*.55 + bot.id*2.1)*.3;
       const ty = yawTo(bot.pos, look) + sweep;
       bot.yaw += angDiff(bot.yaw, ty)*Math.min(1,dt*5);
       bot.pitch *= (1-dt*3);

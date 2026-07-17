@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=19';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=19';
-import { SKINS, AGENTS } from './config.js?v=19';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=19';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=19';
-import { tracer, spawnSmoke } from './effects.js?v=19';
-import { sfx } from './audio.js?v=19';
+import { G, sens } from './state.js?v=20';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=20';
+import { SKINS, AGENTS } from './config.js?v=20';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=20';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=20';
+import { tracer, spawnSmoke } from './effects.js?v=20';
+import { sfx } from './audio.js?v=20';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -53,9 +53,9 @@ export function initPlayerInput(){
   window.addEventListener('contextmenu', e=> e.preventDefault());
   window.addEventListener('keydown', e=>{
     G.keys[e.code] = true;
+    if(e.code==='Tab'){ e.preventDefault(); G.hooks.showBoard?.(true); }
     if(!G.player) return;
     const p = G.player;
-    if(e.code==='Tab'){ e.preventDefault(); G.hooks.showBoard?.(true); }
     if(!p.alive) return;
     // 天穹战术地图打开时：E/Esc/其他技能键关闭地图
     if(G.hooks.smokeMapKey?.(e.code)) return;
@@ -139,7 +139,7 @@ function updateCastArc(p, cm, alt=false){
   for(let i=0;i<ARC_N;i++){
     a[i*3]=pos.x; a[i*3+1]=pos.y; a[i*3+2]=pos.z;
     n = i+1;
-    vel.y -= 14*DT;
+    vel.y -= 11*DT;
     const step = vel.length()*DT;
     const d = vel.clone().normalize();
     if(rayWalls(pos, d, step + .1) <= step){ break; }
@@ -446,7 +446,7 @@ export function updatePlayer(dt){
       sm.ring.position.copy(pt).y += .06;
       if(G.mouse.lmb){
         G.mouse.lmb = false;
-        spawnSmoke(pt, 4.5, 19);
+        spawnSmoke(pt, 4.5, 15);   // 暗幕烟 15s（原版）
         const ent = sm.agent;
         if(sm.key==='e') ent.abCd.e = G.now + sm.cd;
         ent.ab[sm.key].n--;
@@ -461,8 +461,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=19';
-import { raySphere } from './utils.js?v=19';
+import { hitSpheres } from './combat.js?v=20';
+import { raySphere } from './utils.js?v=20';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

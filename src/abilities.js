@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=19';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=19';
-import { AGENTS } from './config.js?v=19';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=19';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=19';
-import { inAnyOpen } from './map.js?v=19';
-import { sfx } from './audio.js?v=19';
-import { raySphere } from './utils.js?v=19';
+import { G } from './state.js?v=20';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=20';
+import { AGENTS } from './config.js?v=20';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=20';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=20';
+import { inAnyOpen } from './map.js?v=20';
+import { sfx } from './audio.js?v=20';
+import { raySphere } from './utils.js?v=20';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -333,9 +333,9 @@ export function useAbility(ent, key){
 
 // 投掷参数表（速度/上抛）——供投掷轨迹预览使用
 export const THROW_PARAMS = {
-  smokeProj:[15,3], flash:[19,3], molly:[17,4], slowProj:[15,3.5], shock:[20,3], recon:[24,2],
-  nade:[17,3.5], bignade:[16,4], fragNade:[17,3.5], acidPool:[15,3], suppressNade:[16,3],
-  hotHands:[15,3.5], nanoSwarm:[15,3],
+  smokeProj:[21,3], flash:[26,3], molly:[24,4], slowProj:[20,3.5], shock:[28,3], recon:[34,2.5],
+  nade:[24,3.5], bignade:[22,4], fragNade:[24,3.5], acidPool:[22,3], suppressNade:[22,3],
+  hotHands:[22,3.5], nanoSwarm:[21,3],
 };
 
 // ===== 装备式施法（复刻无畏契约：按技能键持在手上，左键释放/右键低抛或取消） =====
@@ -401,7 +401,7 @@ export function performAbility(ent, key, slot, def, opts={}){
     case 'updraft':
       ent.vel.y = 11; ent.grounded = false; sfx.dash(); break;
     case 'smokeProj':
-      throwProj(ent, 'smoke', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
+      throwProj(ent, 'smoke', opts.alt?7:21, opts.alt?2.2:3); sfx.ability(); break;
     case 'smokeSky': {
       if(ent.isPlayer && ent.agent==='tianqiong'){
         // 天穹（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
@@ -425,7 +425,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     }
     case 'molly':
-      throwProj(ent, 'molly', opts.alt?7:17, opts.alt?2.2:4); sfx.ability(); break;
+      throwProj(ent, 'molly', opts.alt?7:24, opts.alt?2.2:4); sfx.ability(); break;
     case 'stim':
       ent.stimUntil = G.now + 12; sfx.ability(); break;
     case 'orbital': {
@@ -440,7 +440,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     }
     case 'slowProj':
-      throwProj(ent, 'slow', opts.alt?7:15, opts.alt?2.2:3.5); sfx.ability(); break;
+      throwProj(ent, 'slow', opts.alt?7:20, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'heal': {
       let target = ent;
       const dir = dirFromYawPitch(ent.yaw, ent.pitch);
@@ -484,7 +484,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     // ---- 新技能 ----
     case 'flash':
-      throwProj(ent, 'flash', opts.alt?8:19, opts.alt?2:3); sfx.ability(); break;
+      throwProj(ent, 'flash', opts.alt?8:26, opts.alt?2:3); sfx.ability(); break;
     case 'firewall':
       fireWall(ent); break;
     case 'selfheal':
@@ -515,9 +515,9 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(!shadowStep(ent, 40, true)){ used=false; if(ent.isPlayer) sfx.deny(); break; }
       break;
     case 'recon':
-      throwProj(ent, 'recon', opts.alt?9:24, opts.alt?2:2); if(key==='e') ent.abCd.e = G.now + (def.cd||35); sfx.ability(); break;
+      throwProj(ent, 'recon', opts.alt?9:34, opts.alt?2:2.5); if(key==='e') ent.abCd.e = G.now + (def.cd||35); sfx.ability(); break;
     case 'shock':
-      throwProj(ent, 'shock', opts.alt?8:20, opts.alt?2.2:3); sfx.ability(); break;
+      throwProj(ent, 'shock', opts.alt?8:28, opts.alt?2.2:3); sfx.ability(); break;
     case 'pulse':
       revealArea(ent.pos.clone(), 22, 2.5, ent.team);
       ent.abCd.e = G.now + def.cd;
@@ -528,9 +528,9 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     // ---- 雷奕 ----
     case 'nade':
-      throwProj(ent, 'nade', opts.alt?7:17, opts.alt?2.2:3.5); sfx.ability(); break;
+      throwProj(ent, 'nade', opts.alt?7:24, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'bignade':
-      throwProj(ent, 'bignade', opts.alt?7:16, opts.alt?2.4:4); sfx.ability(); break;
+      throwProj(ent, 'bignade', opts.alt?7:22, opts.alt?2.4:4); sfx.ability(); break;
     case 'blastjump': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       ent.vel.x = dir.x*8; ent.vel.z = dir.z*8; ent.vel.y = 7.2;
@@ -618,7 +618,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     }
     case 'acidPool':
-      throwProj(ent, 'acid', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
+      throwProj(ent, 'acid', opts.alt?7:22, opts.alt?2.2:3); sfx.ability(); break;
     case 'toxicWall': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       for(let i=0;i<7;i++){
@@ -637,11 +637,11 @@ export function performAbility(ent, key, slot, def, opts={}){
     }
     // ---- 零式 ----
     case 'suppressNade':
-      throwProj(ent, 'suppress', opts.alt?7:16, opts.alt?2.2:3); sfx.ability(); break;
+      throwProj(ent, 'suppress', opts.alt?7:22, opts.alt?2.2:3); sfx.ability(); break;
     case 'nanoSwarm':
-      throwProj(ent, 'nanoproj', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
+      throwProj(ent, 'nanoproj', opts.alt?7:21, opts.alt?2.2:3); sfx.ability(); break;
     case 'fragNade':
-      throwProj(ent, 'frag', opts.alt?7:17, opts.alt?2.2:3.5); sfx.ability(); break;
+      throwProj(ent, 'frag', opts.alt?7:24, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'nullPulse': {
       popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
       ent.stimUntil = G.now + 8;
@@ -650,7 +650,7 @@ export function performAbility(ent, key, slot, def, opts={}){
     }
     // ---- 复刻原版新技能 ----
     case 'hotHands':
-      throwProj(ent, 'hot', opts.alt?7:15, opts.alt?2.2:3.5); sfx.ability(); break;
+      throwProj(ent, 'hot', opts.alt?7:22, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'stimBeacon': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       const p = V3(ent.pos.x + dir.x*1.2, ent.pos.y, ent.pos.z + dir.z*1.2);
@@ -682,8 +682,8 @@ export function performAbility(ent, key, slot, def, opts={}){
     }
     case 'lockdown': {
       const p = V3(ent.pos.x, ent.pos.y, ent.pos.z);
-      spawnDevice('lockdown', p, ent, { until: G.now + 20, armAt: G.now + 4, r: 24 });
-      G.hooks.hudMsg?.(ent.isPlayer ? '全域封锁启动：4 秒后大范围禁锢' : null);
+      spawnDevice('lockdown', p, ent, { until: G.now + 24, armAt: G.now + 8, r: 26 });
+      if(ent.isPlayer) G.hooks.hudMsg?.('全域封锁启动：8 秒后大范围禁锢');
       sfx.beamCharge(G.player ? p.distanceTo(G.player.pos) : 0);
       break;
     }
@@ -881,7 +881,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=19').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=20').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -947,7 +947,7 @@ export function updateProjectiles(dt){
         removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
       }
     } else {
-      p.vel.y -= (p.type==='rocket' ? 2.5 : 14)*dt;
+      p.vel.y -= (p.type==='rocket' ? 2.5 : 11)*dt;
     }
     const step = p.vel.length()*dt;
     const dir = p.vel.clone().normalize();

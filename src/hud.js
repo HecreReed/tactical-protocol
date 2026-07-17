@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=19';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=19';
-import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=19';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=19';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=19';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=19';
-import { buyAbility, sellAbility } from './abilities.js?v=19';
-import { spawnSmoke, targetRing } from './effects.js?v=19';
-import { abilityIcon } from './icons.js?v=19';
-import { sfx, setVolume } from './audio.js?v=19';
+import { G, saveSettings } from './state.js?v=20';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=20';
+import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=20';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=20';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=20';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=20';
+import { buyAbility, sellAbility } from './abilities.js?v=20';
+import { spawnSmoke, targetRing } from './effects.js?v=20';
+import { abilityIcon } from './icons.js?v=20';
+import { sfx, setVolume } from './audio.js?v=20';
 
 const $ = id => document.getElementById(id);
 let els = {};
