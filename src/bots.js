@@ -1,10 +1,10 @@
-import { G } from './state.js?v=21';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=21';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=21';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=21';
-import { useAbility, botCast } from './abilities.js?v=21';
-import { removeDrop } from './effects.js?v=21';
-import { sfx } from './audio.js?v=21';
+import { G } from './state.js?v=22';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=22';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=22';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=22';
+import { useAbility, botCast } from './abilities.js?v=22';
+import { removeDrop } from './effects.js?v=22';
+import { sfx } from './audio.js?v=22';
 
 const THINK_DT = .12;
 

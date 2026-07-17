@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=21';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=21';
-import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=21';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=21';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=21';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=21';
-import { buyAbility, sellAbility } from './abilities.js?v=21';
-import { spawnSmoke, targetRing } from './effects.js?v=21';
-import { abilityIcon } from './icons.js?v=21';
-import { sfx, setVolume } from './audio.js?v=21';
+import { G, saveSettings } from './state.js?v=22';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=22';
+import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=22';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=22';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=22';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=22';
+import { buyAbility, sellAbility } from './abilities.js?v=22';
+import { spawnSmoke, targetRing } from './effects.js?v=22';
+import { abilityIcon } from './icons.js?v=22';
+import { sfx, setVolume } from './audio.js?v=22';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -521,7 +521,10 @@ export function renderMinimapStatic(){
   }
 }
 
+let _mmLast = 0;
 function drawMinimap(){
+  if(G.now - _mmLast < .066) return;   // 小地图 15fps 节流
+  _mmLast = G.now;
   const c = els.minimap, g = c.getContext('2d');
   g.clearRect(0,0,230,230);
   g.drawImage(mmStatic,0,0);

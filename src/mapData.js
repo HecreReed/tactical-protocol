@@ -86,6 +86,7 @@ function spawnSets(){
     corridor([[-36,34],[-36,24],[-32,24],[-32,20]],2.2),    // R2 西缘小径：出生→B长厅（绕左翼）
     corridor([[-18,-27.4],[18,-27.4]],2.2),                 // R3 点后环廊：横连 A/B 后方（防守转点/进攻绕后）
     corridor([[-6,10],[6,10]],2),                           // R4 市场中路横贯（减少绕行）
+    corridor([[-20,9],[-8,9]],1.6),                         // R5 长厅↔市场 北窄巷
   ];
   // 房屋
   const innerWalls=[
@@ -104,11 +105,13 @@ function spawnSets(){
     [30,-26,34,-19,2],   // A 高台
     [30,14,34,18,1.8],   // A 前院眺台
     [-22,-26,-18,-22,2], // B 角楼台
+    [2,10,7,15,3],       // 市场瞭望塔（3m 制高点·窄梯上）
   ];
   const stairs=[
     {x1:26,z1:-25,x2:30,z2:-22,dir:'+x',h:2},
     {x1:26.4,z1:15,x2:30,z2:18,dir:'+x',h:1.8},
     {x1:-26,z1:-26,x2:-22,z2:-23,dir:'+x',h:2},
+    {x1:-3,z1:11.5,x2:2,z2:14.5,dir:'+x',h:3},   // 市场瞭望塔窄梯
   ];
   const crates=[
     [28,24,1.8,1,0],[32,20,1.4,1,0],
@@ -195,6 +198,7 @@ function spawnSets(){
     corridor([[-36,14],[-36,2],[-33,2],[-33,-8]],2.2),     // R2 西缘小径：出生→C 西缘绕后
     corridor([[8,-20],[8,-14],[22,-14]],2),                 // R3 暗道支线：B↔A 直连近道
     corridor([[-22,-14],[-14,-14],[-14,-24]],2),            // R4 西路暗支：B↔C 直连近道
+    corridor([[-24,17],[-8,17]],1.6),                       // R5 左廊↔市场 北窄巷
   ];
   const innerWalls=[
     ...house(-4,2,3,9,3.6,{s:[0,2], n:[-3,-1], e:[4,6]}),        // 市场民居
@@ -210,9 +214,11 @@ function spawnSets(){
   const platforms=[
     [32,14,36,20,1.8],   // 右院高台
     [31,-24,36,-18,2.2], // A 塔台
+    [5,10,10,15,3],      // 市场瞭望塔（3m 制高点）
   ];
   const stairs=[
     {x1:29,z1:16,x2:32,z2:19,dir:'+x',h:1.8},
+    {x1:0,z1:11,x2:5,z2:14,dir:'+x',h:3},        // 市场瞭望塔窄梯
     {x1:27,z1:-23,x2:31,z2:-20,dir:'+x',h:2.2},
   ];
   const crates=[
@@ -300,6 +306,7 @@ function spawnSets(){
     corridor([[-34,14],[-34,6],[-33,6],[-33,-2],[-34,-2],[-34,-6],[-30,-8]],2.2), // R2 西崖栈道：台地→B 西缘绕山（接入 B 点）
     corridor([[-10,-8],[-10,-18],[-6,-18]],2),               // R3 中村西巷：中村→B 直连小道
     corridor([[-16,-28],[16,-28]],2.2),                      // R4 谷底环廊：A/B 后方横连
+    corridor([[-18,10],[-6,10],[-6,4]],1.6),                 // R5 台地↔中村 窄巷
   ];
   const innerWalls=[
     ...house(21,10,27,16,3.6,{s:[23,25], e:[12,14]}),        // 右村民居
@@ -397,6 +404,8 @@ function spawnSets(){
     corridor([[0,-31],[0,-24]],2.8),                        // 防守→运河南
     corridor([[33,10],[36,10],[36,-9],[32,-9],[32,-12.5]],2),    // 东缘飞架（A 第三路）
     corridor([[-33,10],[-36,10],[-36,-9],[-32,-9],[-32,-12.5]],2), // 西缘飞架（B 第三路）
+    corridor([[7,10],[18,10]],1.6),                          // 运河东岸窄巷
+    corridor([[-18,10],[-7,10]],1.6),                        // 运河西岸窄巷
   ];
   const bridges=[
     [-11.5,1.5,11.5,5.5,2.6],   // 高架天桥：横跨运河，连接东西桥头
@@ -486,6 +495,7 @@ function spawnSets(){
     corridor([[24,-31],[24,-26]],3),                        // 防守→A
     corridor([[-24,-32],[-24,-28]],3),                      // 防守→高原南坡
     corridor([[0,-31],[0,-26],[6,-26],[6,-22],[14,-22]],2.4), // 防守→A 后巷（蛇形）
+    corridor([[8,4],[16,4]],1.6),                             // 雪原↔雪场 窄门
   ];
   const platforms=[
     [-34,-28,-14,-10,1.8], // B 高原整体
@@ -577,6 +587,7 @@ function spawnSets(){
     corridor([[-6,6],[-16,6],[-16,12],[-24,12]],2),          // 广场↔拱街
     corridor([[12,-1.5],[12,4]],1.8),                        // 东桥头↔右巷
     corridor([[-12,-1.5],[-12,4]],1.8),                      // 西桥头↔左巷
+    corridor([[8,7],[24,7]],1.6),                            // 广场↔右炉场 直窄巷
   ];
   const bridges=[
     [-10,-6,10,-2.5,2.7],  // 过街天桥：横跨 B 主路上空
@@ -670,15 +681,19 @@ function spawnSets(){
     corridor([[2,-31],[2,-24]],2.6),                        // 防守→后殿
     corridor([[10,8],[16,8],[16,10],[20,10]],2),            // 广场↔A 外院
     corridor([[-10,8],[-16,8],[-16,10],[-20,10]],2),        // 广场↔B 外院
+    corridor([[10,5],[20,5]],1.6),                          // 广场↔A 外院 窄巷
+    corridor([[-20,5],[-10,5]],1.6),                        // 广场↔B 外院 窄巷
   ];
   const platforms=[
     [-4,-4,4,3,2],         // 中央圣坛
+    [29,10,34,15,3],       // A 外院钟楼（3m 制高点）
   ];
   const stairs=[
     {x1:-1.8,z1:3,x2:1.8,z2:6.6,dir:'-z',h:2},     // 北阶
     {x1:-1.8,z1:-7.6,x2:1.8,z2:-4,dir:'+z',h:2},   // 南阶
     {x1:4,z1:-1.8,x2:7.6,z2:1.8,dir:'-x',h:2},     // 东阶
     {x1:-7.6,z1:-1.8,x2:-4,z2:1.8,dir:'+x',h:2},   // 西阶
+    {x1:24,z1:11,x2:29,z2:14.2,dir:'+x',h:3},      // 钟楼窄梯
   ];
   const innerWalls=[
     ...house(20,-25,27,-19,3.6,{n:[22,24], w:[-23,-21]}),    // A 神殿房
@@ -958,6 +973,7 @@ function spawnSets(){
     corridor([[-8,2],[-12,2]],2),                             // 广场↔索道口
     corridor([[8,2],[12,2],[12,4]],2),                        // 广场↔上城街
     corridor([[-25,6],[-29,6],[-29,-2],[-27.5,-2],[-27.5,-8.2]],2), // 索道西崖小道（B 第三路）
+    corridor([[8,6],[12,6]],1.4),                             // 广场↔上城街 第二窄门
   ];
   const platforms=[
     [26,-26,34,-16,2.2],   // A 上城高台（吊脚楼台）
@@ -1060,6 +1076,42 @@ for(const m of MAPS){
   m.spawns.def = m.spawns.def.map(p=>[sc(p[0]),sc(p[1])]);
   m.sky.fogFar = Math.round(m.sky.fogFar * 1.7);
   for(const r of (m.roomRects||[])){ r[0]=r[0]; }   // roomRects 与 open 前段共享引用，已随 open 缩放
+}
+
+// ============================================================
+// 走廊收窄：等比放大后的通道过宽，短轴收窄回贴近原始宽度（窄入宽出手感）
+// 关键点（下包位/驻点/集结/要道/烟点）若在走廊内则自动保证仍在通道中
+// ============================================================
+for(const m of MAPS){
+  const nRooms = (m.roomRects||[]).length;
+  const keyPts = [];
+  for(const k of Object.keys(m.sites)) keyPts.push(m.sites[k].plant);
+  for(const p of m.defPostList){ keyPts.push(p.p); }
+  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]) keyPts.push(h.p);
+  for(const k of Object.keys(m.stages||{})) keyPts.push(m.stages[k]);
+  for(const k of Object.keys(m.chokes||{})) keyPts.push(m.chokes[k]);
+  for(const k of Object.keys(m.smokePoints||{})) for(const pt of m.smokePoints[k]) keyPts.push(pt);
+  for(const sp of m.spawns.atk) keyPts.push(sp);
+  for(const sp of m.spawns.def) keyPts.push(sp);
+  for(let i=nRooms; i<m.open.length; i++){
+    const r = m.open[i];
+    const w = r[2]-r[0], d = r[3]-r[1];
+    const short = Math.min(w,d);
+    if(short <= 3.6) continue;
+    let half = Math.max(1.2, short*.32);       // 目标半宽（≈原始宽度）
+    const axis = w <= d ? 0 : 1;               // 收窄短轴
+    const c = axis===0 ? (r[0]+r[2])/2 : (r[1]+r[3])/2;
+    for(const pt of keyPts){
+      const px = pt[0], pz = pt[1];
+      if(px>=r[0] && px<=r[2] && pz>=r[1] && pz<=r[3]){
+        const v = axis===0 ? px : pz;
+        half = Math.max(half, Math.abs(v - c) + 1.1);
+      }
+    }
+    half = Math.min(half, short/2);
+    if(axis===0){ r[0]=+(c-half).toFixed(2); r[2]=+(c+half).toFixed(2); }
+    else { r[1]=+(c-half).toFixed(2); r[3]=+(c+half).toFixed(2); }
+  }
 }
 
 // ============================================================

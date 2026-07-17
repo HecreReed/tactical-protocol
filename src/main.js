@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=21';
-import { buildMap } from './map.js?v=21';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=21';
-import { initAudio } from './audio.js?v=21';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=21';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=21';
-import { updateBots } from './bots.js?v=21';
-import { startMatch, updateGame } from './game.js?v=21';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=21';
+import { G } from './state.js?v=22';
+import { buildMap } from './map.js?v=22';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=22';
+import { initAudio } from './audio.js?v=22';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=22';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=22';
+import { updateBots } from './bots.js?v=22';
+import { startMatch, updateGame } from './game.js?v=22';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=22';
 
 let started = false;
 let sun = null;
@@ -15,7 +15,7 @@ let sun = null;
 function initThree(){
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;   // 阴影半频更新（性能优化，视觉几乎无差）
@@ -84,7 +84,7 @@ function applyGraphics(){
       if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; }
     }
   }
-  G.renderer.setPixelRatio(s.quality==='high' ? Math.min(devicePixelRatio,2) : 1);
+  G.renderer.setPixelRatio(s.quality==='high' ? Math.min(devicePixelRatio,1.75) : 1);
   G.renderer.toneMappingExposure = s.quality==='high' ? 1.15 : 1.05;
   if(G.camera && !G.player?.ads){
     G.camera.fov = s.fov;

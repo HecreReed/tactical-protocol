@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=21';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=21';
-import { SKINS, AGENTS } from './config.js?v=21';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=21';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=21';
-import { tracer, spawnSmoke } from './effects.js?v=21';
-import { sfx } from './audio.js?v=21';
+import { G, sens } from './state.js?v=22';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=22';
+import { SKINS, AGENTS } from './config.js?v=22';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=22';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=22';
+import { tracer, spawnSmoke } from './effects.js?v=22';
+import { sfx } from './audio.js?v=22';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -417,7 +417,7 @@ export function updatePlayer(dt){
   const rec = w.def.recoil;
   P.recoilPitch = approach(P.recoilPitch, 0, (rec.decay||30)*8*dt);
   P.recoilYaw = approach(P.recoilYaw, 0, (rec.decay||30)*5*dt);
-  P.bloom = approach(P.bloom, 0, 3.2*dt);
+  P.bloom = approach(P.bloom, 0, 4.4*dt);
   P.vmKick = approach(P.vmKick, 0, .5*dt);
   P.camShake = approach(P.camShake, 0, 3*dt);
 
@@ -461,8 +461,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=21';
-import { raySphere } from './utils.js?v=21';
+import { hitSpheres } from './combat.js?v=22';
+import { raySphere } from './utils.js?v=22';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
@@ -482,7 +482,9 @@ function shootPlayer(p, w, dt){
   const ads = p.ads, adsDef = w.def.ads;
   const hspd = Math.hypot(p.vel.x, p.vel.z);
   const moveFactor = clamp(hspd/6, 0, 1);
-  let spread = w.def.spread.base + moveFactor*w.def.spread.mv*3 + P.bloom;
+  let spread = w.def.spread.base + moveFactor*w.def.spread.mv*2.3 + P.bloom;
+  // 首发精准（原版手感）：停枪 0.35s 后第一发几乎必中准星
+  if(w.shots <= 1 && moveFactor < .35) spread *= .3;
   if(ads) spread *= adsDef.spread ?? .6;
   if(p.crouch) spread *= .8;
   if(!p.grounded) spread *= 2.5;
@@ -501,7 +503,7 @@ function shootPlayer(p, w, dt){
   const rec = w.def.recoil;
   P.recoilPitch = Math.min(rec.cap, P.recoilPitch + rec.perShot*(1 + w.shots*.06));
   P.recoilYaw += (Math.sin(w.shots*.9) + gauss()*.4) * rec.wander;
-  P.bloom += w.def.spread.bloom * .25;
+  P.bloom += w.def.spread.bloom * .2;
   P.vmKick = Math.min(.12, P.vmKick + .035);
   P.camShake = Math.min(1, P.camShake + .25);
 }
