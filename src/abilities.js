@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js';
-import { AGENTS } from './config.js';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js';
-import { inAnyOpen } from './map.js';
-import { sfx } from './audio.js';
-import { raySphere } from './utils.js';
+import { G } from './state.js?v=10';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=10';
+import { AGENTS } from './config.js?v=10';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=10';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=10';
+import { inAnyOpen } from './map.js?v=10';
+import { sfx } from './audio.js?v=10';
+import { raySphere } from './utils.js?v=10';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -179,7 +179,7 @@ export function useAbility(ent, key){
       break;
     }
     case 'updraft':
-      ent.vel.y = 8.2; ent.grounded = false; sfx.dash(); break;
+      ent.vel.y = 11; ent.grounded = false; sfx.dash(); break;
     case 'smokeProj':
       throwProj(ent, 'smoke', 15, 3); sfx.ability(); break;
     case 'smokeSky': {
@@ -238,6 +238,14 @@ export function useAbility(ent, key){
     }
     case 'knifeUlt':
       ent.knifeUlt = 5;
+      ent.ultWeapon = {
+        id:'ultblade',
+        def:{ name:'锋刃', cat:'ult', mag:999, res:0, fi:.33, rl:0, alt:false, pellets:1,
+          dmg:{0:{h:150,b:50,l:50}},
+          spread:{base:.2,mv:.2,bloom:0}, recoil:{perShot:0,cap:0,wander:0,decay:30},
+          ads:{}, vm:{x:.14,y:-.2,z:-.28,sc:.035,rot:[0.6,0,0]} },
+        ammo:999, reserve:0, nextFire:0, reloadEnd:0, shots:0, lastShot:0,
+      };
       sfx.ultReady();
       break;
     // ---- 新技能 ----
@@ -380,7 +388,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=10').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

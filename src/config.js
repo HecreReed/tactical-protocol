@@ -95,7 +95,7 @@ export const WEAPONS = [
 
 export const AGENTS = {
   fengying: {
-    name:'风影', role:'决斗者', emoji:'🌀', desc:'高机动位移刺客', color:0x8fd3ff,
+    name:'风影', role:'决斗者', emoji:'🌀', desc:'高机动位移刺客·被动:空中按住空格滑翔', color:0x8fd3ff,
     ultCost:7, ab:{
       c:{name:'侧风烟',cost:250,max:1,start:1,cd:0,type:'smokeProj'},
       q:{name:'上升气流',cost:150,max:2,start:1,cd:0,type:'updraft'},

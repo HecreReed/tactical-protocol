@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js";
-import { V3, rayAABB, dist2d } from "./utils.js";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=8";
+import { G } from "./state.js?v=10";
+import { V3, rayAABB, dist2d } from "./utils.js?v=10";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=10";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -642,7 +642,7 @@ function buildWalls(open){
   return boxes;
 }
 function buildStairBoxes(s){
-  const boxes=[],steps=Math.max(2,Math.ceil(s.h/.45));
+  const boxes=[],steps=Math.max(2,Math.ceil(s.h/.28));
   for(let i=0;i<steps;i++){const h=s.h*(i+1)/steps;let x1=s.x1,x2=s.x2,z1=s.z1,z2=s.z2;
     if(s.dir==='+x'){const w=(s.x2-s.x1)/steps;x1=s.x1+i*w;x2=x1+w;}else if(s.dir==='+z'){const w=(s.z2-s.z1)/steps;z1=s.z1+i*w;z2=z1+w;}
     boxes.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});}

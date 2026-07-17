@@ -1,9 +1,9 @@
-import { G } from './state.js';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js';
-import { findPath, inSite, nearestWp, pathClear } from './map.js';
-import { useAbility, botCast } from './abilities.js';
-import { sfx } from './audio.js';
+import { G } from './state.js?v=10';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=10';
+import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=10';
+import { findPath, inSite, nearestWp, pathClear } from './map.js?v=10';
+import { useAbility, botCast } from './abilities.js?v=10';
+import { sfx } from './audio.js?v=10';
 
 const THINK_DT = .12;
 
@@ -296,6 +296,7 @@ function combatUpdate(bot, dt){
     a.burstLeft--;
     if(a.burstLeft<=0) a.burstPause = G.now + rand(.12, .45 - .18*D());
     w.ammo--;
+    if(bot.knifeUlt > 0) bot.knifeUlt--;
     w.nextFire = G.now + w.def.fi * rand(1,1.12);
     const meMoving = Math.hypot(bot.vel.x,bot.vel.z) > 1.5;
     const errDeg = (1.0 + d*.055) * errMul * (meMoving?1.6:1) * (bot.crouch ? .85 : 1) * (2.05 - D());

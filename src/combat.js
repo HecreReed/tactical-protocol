@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js';
-import { WIDE } from './config.js';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js';
-import { sfx } from './audio.js';
+import { G } from './state.js?v=10';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=10';
+import { WIDE } from './config.js?v=10';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=10';
+import { sfx } from './audio.js?v=10';
 
 let nextId = 1;
 
@@ -32,12 +32,13 @@ export function makeEnt({name, team, agent, isPlayer=false}){
     healQueue: 0,
     stepAcc: 0,
     dashUntil: 0,
+    glide: false, ultWeapon: null,
   };
   return ent;
 }
 
 export function curWeapon(ent){
-  if(ent.knifeUlt > 0) return ent.ultWeapon;
+  if(ent.knifeUlt > 0 && ent.ultWeapon) return ent.ultWeapon;
   return ent.weapons[ent.slot] || ent.weapons.knife;
 }
 
@@ -49,7 +50,7 @@ export function eyePos(ent, out){
 
 export function moveSpeed(ent){
   const w = curWeapon(ent);
-  const catMul = {melee:1.08, pistol:1.0, smg:.98, rifle:.94, sniper:.9, heavy:.88, shotgun:.98}[w.def.cat] || 1;
+  const catMul = {melee:1.12, ult:1.12, pistol:1.0, smg:.96, rifle:.9, sniper:.84, heavy:.82, shotgun:.96}[w.def.cat] || 1;
   let s = 6.0 * catMul;
   if(ent.walking) s *= .52;
   if(ent.crouch) s *= .62;
@@ -63,10 +64,11 @@ export function moveSpeed(ent){
 // ---------- collision ----------
 function collideAxis(ent, axis, r, h){
   const p = ent.pos;
+  // 上升时不允许"跨越"障碍顶部（防止穿入箱体后被吸到顶上）；着地/下落时允许 0.35 的平滑跨坎
+  const step = ent.vel.y > 1 ? .04 : .35;
   const all = [G.colliders, G.dynColliders];
   for(const list of all) for(const b of list){
-    // 头顶/脚下容忍 0.35 用于平滑步过小坎，大于 0.35 的视为不可跨越障碍
-    if(p.y + h <= b.min.y + .08 || p.y + 0.35 >= b.max.y) continue;
+    if(p.y + h <= b.min.y + .08 || p.y + step >= b.max.y) continue;
     if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
     if(p.z + r <= b.min.z || p.z - r >= b.max.z) continue;
     if(axis==='x'){
@@ -78,6 +80,17 @@ function collideAxis(ent, axis, r, h){
     }
   }
 }
+// 站到 topY 上后头顶是否有足够空间（防止被吸到屋内箱顶后卡进屋顶）
+function headroomClear(p, r, h, topY){
+  const all = [G.colliders, G.dynColliders];
+  for(const list of all) for(const b of list){
+    if(b.min.y < topY + .1 || b.min.y >= topY + h) continue;
+    if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
+    if(p.z + r <= b.min.z || p.z - r >= b.max.z) continue;
+    return false;
+  }
+  return true;
+}
 export function moveEntity(ent, dt){
   const r = .38, h = ent.crouch ? 1.3 : 1.75;
   const p = ent.pos;
@@ -85,15 +98,18 @@ export function moveEntity(ent, dt){
   p.z += ent.vel.z * dt; collideAxis(ent,'z',r,h);
   // vertical
   ent.vel.y -= 19 * dt;
+  if(ent.glide && ent.vel.y < -2) ent.vel.y = -2;   // 风影被动：滞空滑翔
   p.y += ent.vel.y * dt;
+  const rising = ent.vel.y > 0;
   let floorY = 0;
   const all = [G.colliders, G.dynColliders];
   for(const list of all) for(const b of list){
     if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
     if(p.z + r <= b.min.z || p.z - r >= b.max.z) continue;
-    if(b.max.y <= p.y + .55 && b.max.y > floorY) floorY = b.max.y;
     // head bump
-    if(p.y + h > b.min.y && p.y + .55 < b.min.y && ent.vel.y > 0){ p.y = b.min.y - h; ent.vel.y = 0; }
+    if(rising && p.y + h > b.min.y && p.y + .55 < b.min.y){ p.y = b.min.y - h; ent.vel.y = 0; }
+    // 只在非上升阶段吸附地面/箱顶，且要求头顶有空间
+    if(!rising && b.max.y > floorY && b.max.y <= p.y + .55 && headroomClear(p, r, h, b.max.y)) floorY = b.max.y;
   }
   if(p.y <= floorY){
     p.y = floorY;
@@ -184,6 +200,17 @@ export function killEnt(target, killer, weaponName, part){
   G.hooks.onDeath?.(target, killer);
 }
 
+// 鞭尸：射线检测尸体（不挡活人子弹，仅在未命中实体时结算）
+function corpseHit(origin, dir, maxD){
+  let best = Infinity, cp = null;
+  for(const c of G.corpses){
+    const center = V3(c.pos.x, c.pos.y + .3, c.pos.z);
+    const d = raySphere(origin, dir, center, .55, maxD);
+    if(d < best){ best = d; cp = c; }
+  }
+  return cp ? best : Infinity;
+}
+
 // ---------- firing ----------
 export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
   const origin = eyePos(shooter);
@@ -199,7 +226,12 @@ export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
     const b = rr*Math.sin(th) + (opts.pitchOff||0);
     const dir = V3().copy(baseDir).addScaledVector(right, a).addScaledVector(up, b).normalize();
     const hit = traceRay(origin, dir, 200, shooter);
-    const end = V3().copy(origin).addScaledVector(dir, hit.dist);
+    let end = V3().copy(origin).addScaledVector(dir, hit.dist);
+    let corpse = false;
+    if(!hit.ent){
+      const cd = corpseHit(origin, dir, hit.dist);
+      if(cd < hit.dist){ corpse = true; end = V3().copy(origin).addScaledVector(dir, cd); }
+    }
     tracer(V3().copy(origin).addScaledVector(dir, 1.2).addScaledVector(right, shooter.isPlayer?.12:0), end, tracerColor);
     if(hit.ent){
       hitAny = true;
@@ -211,6 +243,8 @@ export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
       if(hit.part==='h') hs = true;
       bloodFX(end);
       applyDamage(hit.ent, dmg, shooter, def.name, hit.part);
+    } else if(corpse){
+      bloodFX(end);
     } else if(hit.dist < 200){
       impactFX(end);
       if(G.player){ sfx.impact(end.distanceTo(G.player.pos)); }
@@ -238,11 +272,14 @@ export function meleeAttack(ent, heavy){
     bloodFX(V3().copy(origin).addScaledVector(dir, hit.dist));
     applyDamage(hit.ent, heavy?150:50, ent, '近战', hit.part);
     if(ent.isPlayer) G.hooks.hitmarker?.(false,false);
+  } else {
+    const cd = corpseHit(origin, dir, hit.dist);
+    if(cd < hit.dist) bloodFX(V3().copy(origin).addScaledVector(dir, cd));
   }
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js';
+import { AGENTS } from './config.js?v=10';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

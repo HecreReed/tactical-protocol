@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js';
-import { V3 } from './utils.js';
-import { sfx } from './audio.js';
+import { G } from './state.js?v=10';
+import { V3 } from './utils.js?v=10';
+import { sfx } from './audio.js?v=10';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -50,7 +50,7 @@ export function teleportFX(p){ const f=getFlash(0x8040d0,.55); f.mesh.position.c
 export function flashFX(p){ const f=getFlash(0xffffff,.5); f.mesh.position.copy(p); f.life=f.max=.45; f.grow=18; }
 
 // ---- smokes ----
-const smokeMat = new THREE.MeshStandardMaterial({color:0xdce2ea, roughness:1, transparent:true, opacity:.88, flatShading:false});
+const smokeMat = new THREE.MeshStandardMaterial({color:0xdce2ea, roughness:1, transparent:true, opacity:.985, flatShading:false});
 export function spawnSmoke(pos, r, dur){
   // 主体 + 内部发光核，营造体积感
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(r*.55, 2),
@@ -180,7 +180,7 @@ export function updateFX(dt){
     const rem = s.until - G.now;
     if(rem < 1.0){
       const op = Math.max(0, rem/1.0);
-      s.mesh.material.opacity = .88 * op;
+      s.mesh.material.opacity = .985 * op;
       if(s.core) s.core.material.opacity = .18 * op;
     }
     if(rem <= 0){ if(s.mesh) scene.remove(s.mesh); if(s.core) scene.remove(s.core); G.smokes.splice(i,1); }

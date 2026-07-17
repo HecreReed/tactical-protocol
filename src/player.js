@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js';
-import { SKINS } from './config.js';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage } from './combat.js';
-import { useAbility } from './abilities.js';
-import { tracer } from './effects.js';
-import { sfx } from './audio.js';
+import { G, sens } from './state.js?v=10';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=10';
+import { SKINS } from './config.js?v=10';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage } from './combat.js?v=10';
+import { useAbility } from './abilities.js?v=10';
+import { tracer } from './effects.js?v=10';
+import { sfx } from './audio.js?v=10';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -171,6 +171,8 @@ export function updatePlayer(dt){
   if(canMove && G.keys['Space'] && p.grounded && !p.channel){
     p.vel.y = 5.2; p.grounded = false;
   }
+  // 风影被动：空中按住空格滑翔（缓降）
+  p.glide = p.agent==='fengying' && !p.grounded && !!G.keys['Space'] && canMove;
   moveEntity(p, dt);
 
   // footsteps
@@ -249,8 +251,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js';
-import { raySphere } from './utils.js';
+import { hitSpheres } from './combat.js?v=10';
+import { raySphere } from './utils.js?v=10';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

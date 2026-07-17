@@ -46,8 +46,8 @@ function makeMap({id,name,desc,sky,wallTone,accent,rooms,corridors,sites,spawns,
 
 function spawnSets(){
   return {
-    atk:[[-8,36],[0,36],[8,36],[-4,38],[4,38]], atkYaw:0,
-    def:[[-6,-33],[0,-35],[6,-33],[-4,-37],[4,-37]], defYaw:Math.PI,
+    atk:[[-8,36],[0,36],[8,36],[-4,37.2],[4,37.2]], atkYaw:0,
+    def:[[-6,-33],[0,-35],[6,-33],[-4,-36.8],[4,-36.8]], defYaw:Math.PI,
   };
 }
 
