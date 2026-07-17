@@ -363,6 +363,11 @@ function spectate(dt){
 let obsTarget = null;
 let obsPos = new THREE.Vector3(0, 6, 0);
 let obsYaw = 0, obsPitch = -0.25;
+let obsFP = false;
+export function toggleObserverView(){
+  obsFP = !obsFP;
+  G.hooks.hudMsg?.(obsFP ? '第一人称观战（V 切回第三人称）' : '第三人称观战（V 切回第一人称）');
+}
 export function updateObserver(dt){
   const cam = G.camera;
   const alive = G.ents.filter(e=>e.alive);
@@ -375,25 +380,39 @@ export function updateObserver(dt){
     const t = alive[P.spectateIdx % alive.length];
     if(t !== obsTarget) obsTarget = t;
     G.spectatingEnt = t;
-    // 第三人称：目标身后上方，看向前方
-    const d = 3.2;
-    const tx = t.pos.x - Math.sin(t.yaw)*d;
-    const tz = t.pos.z - Math.cos(t.yaw)*d;
-    const ty = t.pos.y + 2.4;
-    obsPos.lerp(new THREE.Vector3(tx, ty, tz), Math.min(1, dt*6));
-    cam.position.copy(obsPos);
     cam.rotation.order = 'YXZ';
-    const targetYaw = t.yaw;
-    const targetPitch = -0.18;
-    // 平滑插值角度
-    let dy = targetYaw - obsYaw;
-    while(dy > Math.PI) dy -= Math.PI*2;
-    while(dy < -Math.PI) dy += Math.PI*2;
-    obsYaw += dy * Math.min(1, dt*5);
-    obsPitch += (targetPitch - obsPitch) * Math.min(1, dt*5);
-    cam.rotation.y = obsYaw;
-    cam.rotation.x = obsPitch;
-    cam.rotation.z = 0;
+    if(obsFP){
+      // 第一人称：直接使用目标视角
+      obsPos.lerp(new THREE.Vector3(t.pos.x, t.pos.y + eyeH(t), t.pos.z), Math.min(1, dt*20));
+      cam.position.copy(obsPos);
+      let dy = t.yaw - obsYaw;
+      while(dy > Math.PI) dy -= Math.PI*2;
+      while(dy < -Math.PI) dy += Math.PI*2;
+      obsYaw += dy * Math.min(1, dt*14);
+      obsPitch += (t.pitch - obsPitch) * Math.min(1, dt*14);
+      cam.rotation.y = obsYaw;
+      cam.rotation.x = obsPitch;
+      cam.rotation.z = 0;
+    } else {
+      // 第三人称：目标身后上方，看向前方
+      const d = 3.2;
+      const tx = t.pos.x - Math.sin(t.yaw)*d;
+      const tz = t.pos.z - Math.cos(t.yaw)*d;
+      const ty = t.pos.y + 2.4;
+      obsPos.lerp(new THREE.Vector3(tx, ty, tz), Math.min(1, dt*6));
+      cam.position.copy(obsPos);
+      const targetYaw = t.yaw;
+      const targetPitch = -0.18;
+      // 平滑插值角度
+      let dy = targetYaw - obsYaw;
+      while(dy > Math.PI) dy -= Math.PI*2;
+      while(dy < -Math.PI) dy += Math.PI*2;
+      obsYaw += dy * Math.min(1, dt*5);
+      obsPitch += (targetPitch - obsPitch) * Math.min(1, dt*5);
+      cam.rotation.y = obsYaw;
+      cam.rotation.x = obsPitch;
+      cam.rotation.z = 0;
+    }
   } else {
     G.spectatingEnt = null;
     cam.position.lerp(new THREE.Vector3(0, 42, 12), Math.min(1, dt*3));
@@ -414,4 +433,5 @@ window.addEventListener('keydown', e=>{
     const alive = G.ents.filter(e=>e.alive);
     if(alive.length) obsTarget = alive[P.spectateIdx % alive.length];
   }
+  if(!G.player && G.observer && e.code==='KeyV') toggleObserverView();
 });

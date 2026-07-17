@@ -3,10 +3,10 @@ import { G } from './state.js';
 import { buildMap } from './map.js';
 import { initFX, updateFX, pulseBarriers } from './effects.js';
 import { initAudio } from './audio.js';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=7';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=7';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=8';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=8';
 import { updateBots } from './bots.js';
-import { startMatch, updateGame } from './game.js?v=7';
+import { startMatch, updateGame } from './game.js?v=8';
 import { updateProjectiles, tickHealAndZones } from './abilities.js';
 
 let started = false;
@@ -149,6 +149,7 @@ function boot(){
     if(!observer) buildViewModel();
     started = true;
     if(!observer) setBuyOpen(true);
+    if(observer) G.hooks.hudMsg?.('空格 切换观战目标 · V 切换第一/第三人称');
   });
 
   loop();
