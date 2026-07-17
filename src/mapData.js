@@ -1,4 +1,8 @@
-//  mapData.js: hand-crafted winding tactical maps with loops and small alleys
+//  mapData.js: hand-crafted asymmetric tactical maps
+//  - 弯弯绕绕的主路（S 形/双折）+ 侧翼小道
+//  - 无死胡同：每个区域至少两个出入口，全部成环
+//  - 房屋建模（innerWalls 墙体 + roofs 屋顶 + 门洞）
+//  - 高低差（platforms 高台 + stairs 楼梯）
 const MAPS=[];
 
 function room(x1, z1, x2, z2){ return [x1, z1, x2, z2]; }
@@ -15,11 +19,29 @@ function corridor(points, w){
   return rects;
 }
 
-function makeMap({id,name,desc,sky,wallTone,accent,rooms,corridors,sites,spawns,barriers,stages,defPostList,atkHolds,smokePoints,chokes,crates}){
+// 生成一间小房：四面墙带门洞。返回 innerWalls 段数组。
+// doors: {s:[x1,x2], n:[x1,x2], w:[z1,z2], e:[z1,z2]} — 各面墙上的门洞范围（可省略 = 实墙）
+function house(x1,z1,x2,z2,h,doors={}){
+  const T=.55, segs=[];
+  const seg=(a,b,c,d)=>{ if(b-a>0.01 && d-c>0.01) segs.push([a,c,b,d,h]); };
+  // south (z1)
+  if(doors.s){ seg(x1,doors.s[0],z1,z1+T); seg(doors.s[1],x2,z1,z1+T); } else seg(x1,x2,z1,z1+T);
+  // north (z2)
+  if(doors.n){ seg(x1,doors.n[0],z2-T,z2); seg(doors.n[1],x2,z2-T,z2); } else seg(x1,x2,z2-T,z2);
+  // west (x1)
+  if(doors.w){ seg(x1,x1+T,z1+T,doors.w[0]); seg(x1,x1+T,doors.w[1],z2-T); } else seg(x1,x1+T,z1+T,z2-T);
+  // east (x2)
+  if(doors.e){ seg(x2-T,x2,z1+T,doors.e[0]); seg(x2-T,x2,doors.e[1],z2-T); } else seg(x2-T,x2,z1+T,z2-T);
+  return segs;
+}
+
+function makeMap({id,name,desc,sky,wallTone,accent,rooms,corridors,sites,spawns,barriers,stages,defPostList,atkHolds,smokePoints,chokes,crates,innerWalls,roofs,platforms,stairs}){
   let open=[];
   for(const r of rooms) open.push(r);
   for(const c of corridors) open=open.concat(c);
-  return {id,name,desc,sky,wallTone,accent,open,innerWalls:[],platforms:[],stairs:[],crates:crates||[],sites,wps:[],extraEdges:[],stages,defPostList,atkHolds,smokePoints,chokes,spawns,barriers};
+  return {id,name,desc,sky,wallTone,accent,open,
+    innerWalls:innerWalls||[], roofs:roofs||[], platforms:platforms||[], stairs:stairs||[],
+    crates:crates||[],sites,wps:[],extraEdges:[],stages,defPostList,atkHolds,smokePoints,chokes,spawns,barriers};
 }
 
 function spawnSets(){
@@ -28,246 +50,293 @@ function spawnSets(){
     def:[[-6,-33],[0,-35],[6,-33],[-4,-37],[4,-37]], defYaw:Math.PI,
   };
 }
-function stdBarriers(defRects){
-  return [{rect:[-38,28,38,29], side:'atk'}].concat(defRects.map(r=>({rect:r, side:'def'})));
-}
 
-// ---------- yiji ----------
+// ============================================================
+// 遗迹 yiji — 双点·不对称：A 在右下大院（带高台），B 在左下石屋区
+// ============================================================
 (function buildYiji(){
-  const W=3.5; // corridor half-width
-  const rooms=[];
-  const corridors=[];
-  rooms.push(room(-38,30,38,38)); // spawn
-  rooms.push(room(-34,20,-22,28)); // TL
-  rooms.push(room(-8,20,8,28));    // TM
-  rooms.push(room(22,20,34,28));   // TR
-  rooms.push(room(-30,4,-18,12));  // ML
-  rooms.push(room(-8,4,8,12));     // MM
-  rooms.push(room(18,4,30,12));    // MR
-  rooms.push(room(-30,-12,-18,-4)); // LL
-  rooms.push(room(-8,-12,8,-4));    // LM
-  rooms.push(room(18,-12,30,-4));   // LR
-  rooms.push(room(-34,-28,-22,-20)); // B site room
-  rooms.push(room(22,-28,34,-20));   // A site room
-  rooms.push(room(-6,-28,6,-20));    // bottom mid
-  rooms.push(room(-38,-38,38,-30));  // def spawn
-
-  // spawn to top (no straight to site)
-  corridors.push(corridor([[-28,30],[-28,24]],W));
-  corridors.push(corridor([[0,30],[0,24]],W));
-  corridors.push(corridor([[28,30],[28,24]],W));
-  // left wing: zigzag down to B
-  corridors.push(corridor([[-28,20],[-28,14],[-24,14],[-24,8]],W));
-  corridors.push(corridor([[-24,4],[-24,-2],[-28,-2],[-28,-8]],W));
-  corridors.push(corridor([[-28,-12],[-28,-18],[-28,-24]],W));
-  // right wing: zigzag down to A
-  corridors.push(corridor([[28,20],[28,14],[24,14],[24,8]],W));
-  corridors.push(corridor([[24,4],[24,-2],[28,-2],[28,-8]],W));
-  corridors.push(corridor([[28,-12],[28,-18],[28,-24]],W));
-  // mid wing with a jog
-  corridors.push(corridor([[0,20],[0,8],[0,-4],[0,-12],[0,-20]],W));
-  // def spawn connectors
-  corridors.push(corridor([[-28,-30],[-28,-24]],W));
-  corridors.push(corridor([[28,-30],[28,-24]],W));
-  corridors.push(corridor([[0,-30],[0,-24]],W));
-  // cross alleys (loops / small paths)
-  corridors.push(corridor([[-22,24],[-12,24],[-12,8],[-18,8]],W-1));
-  corridors.push(corridor([[22,24],[12,24],[12,8],[18,8]],W-1));
-  corridors.push(corridor([[-24,0],[-8,0]],W-1));
-  corridors.push(corridor([[24,0],[8,0]],W-1));
-  corridors.push(corridor([[-22,-8],[-6,-8]],W-1));
-  corridors.push(corridor([[22,-8],[6,-8]],W-1));
-  corridors.push(corridor([[-18,-24],[18,-24]],W-1));
-  // A-B direct small path through def spawn area
-  corridors.push(corridor([[-28,-34],[28,-34]],W-1));
-
-  const sites={
-    A:{rect:[22,-28,34,-20], plant:[28,-24]},
-    B:{rect:[-34,-28,-22,-20], plant:[-28,-24]},
-  };
-  const stages={A:[24,-2], B:[-24,-2]};
-  const defPostList=[
-    {p:[-24,8], look:[-24,24]},
-    {p:[0,8], look:[0,24]},
-    {p:[24,8], look:[24,24]},
-    {p:[-24,-8], look:[-24,8]},
-    {p:[24,-8], look:[24,8]},
+  const rooms=[
+    room(-36,30,36,38),    // atk spawn
+    room(-34,-38,34,-31),  // def spawn
+    room(18,-26,34,-12),   // A site（右下大院）
+    room(-34,-26,-18,-14), // B site（左下石屋区）
+    room(-8,2,10,16),      // 中路市场
+    room(20,4,34,18),      // A 前院
+    room(-34,6,-20,20),    // B 长厅
+    room(-8,-24,8,-12),    // 下中枢纽
   ];
-  const atkHolds={
-    A:[{p:[24,-18], look:[24,8]}, {p:[30,-24], look:[0,-24]}, {p:[18,-24], look:[30,-24]}],
-    B:[{p:[-24,-18], look:[-24,8]}, {p:[-30,-24], look:[0,-24]}, {p:[-18,-24], look:[-30,-24]}],
+  const corridors=[
+    corridor([[28,30],[28,24],[32,24],[32,18]],3),          // 出生→A 前院（折角）
+    corridor([[2,30],[2,22],[-2,22],[-2,16]],3),            // 出生→中路（S 弯）
+    corridor([[-26,30],[-26,24],[-30,24],[-30,20]],3),      // 出生→B 长厅（折角）
+    corridor([[26,4],[26,-4],[31,-4],[31,-12]],3),          // A 前院→A（Z 字）
+    corridor([[1,2],[1,-5],[5,-5],[5,-12]],3),              // 中路→下中（Z 字）
+    corridor([[-27,6],[-27,-2],[-23,-2],[-23,-9],[-27,-9],[-27,-14]],3), // 长厅→B（双 S 弯）
+    corridor([[8,-18],[18,-18]],2.2),                       // 下中→A 小道
+    corridor([[-8,-16],[-13,-16],[-13,-20],[-18,-20]],2.2), // 下中→B 小道（折角）
+    corridor([[26,-31],[26,-26]],3),                        // 防守出生→A
+    corridor([[-26,-31],[-26,-26]],3),                      // 防守出生→B
+    corridor([[2,-31],[2,-24]],2.8),                        // 防守出生→下中
+    corridor([[10,12],[15,12],[15,8],[20,8]],2),            // 市场↔A 前院 窄巷
+    corridor([[-20,10],[-14,10],[-14,6],[-8,6]],2),         // 长厅↔市场 窄巷
+    corridor([[23,-4],[16,-4],[16,-14],[8,-14]],2),         // A 主路↔下中 暗巷
+    corridor([[-21,0],[-12,0],[-12,-13],[-8,-13]],2),       // B 主路↔下中 暗巷
+  ];
+  // 房屋
+  const innerWalls=[
+    ...house(-5,6,3,13,2.6,{s:[-2,0], n:[0,2], e:[8,10]}),        // 市场石屋
+    ...house(-6.5,-22,0.5,-16.5,2.6,{n:[-4,-2], e:[-20,-18]}),    // 下中民居
+    ...house(24,8,30,13,2.6,{s:[26,28], w:[9.5,11.5]}),           // A 前院库房
+    ...house(-33,-25,-27,-20,2.6,{n:[-31,-29], e:[-24,-22]}),     // B 点石屋
+  ];
+  const roofs=[
+    [-5.5,5.5,3.5,13.5,2.6],
+    [-7,-22.5,1,-16,2.6],
+    [23.5,7.5,30.5,13.5,2.6],
+    [-33.5,-25.5,-26.5,-19.5,2.6],
+  ];
+  const platforms=[
+    [30,-26,34,-19,2],   // A 高台
+    [30,14,34,18,1.8],   // A 前院眺台
+    [-22,-26,-18,-22,2], // B 角楼台
+  ];
+  const stairs=[
+    {x1:27,z1:-25,x2:30,z2:-22,dir:'+x',h:2},
+    {x1:27,z1:15,x2:30,z2:18,dir:'+x',h:1.8},
+    {x1:-26,z1:-26,x2:-22,z2:-23,dir:'+x',h:2},
+  ];
+  const crates=[
+    [28,24,1.8,1,0],[32,20,1.4,1,0],
+    [-2,22,1.6,1,0],[-30,24,1.8,1,0],
+    [28,-4,1.8,1,0],[5,-5,1.6,1,0],[-23,-2,1.6,1,0],[-27,-9,1.4,1,0],
+    [22,-16,2,1,0],[26,-22,2.4,2,1],[32,-14,1.6,1,0],[20,-24,1.8,1,0],
+    [-22,-16,2,1,0],[-25,-23,2.2,2,1],[-32,-16,1.6,1,0],
+    [4,-20,1.6,1,0],[-2,10,1.2,1,0],
+    [8,4,1.4,1,0],[-32,17,1.8,2,1],[-22,8,1.6,1,0],[22,16,1.6,1,0],
+    [10,-34,1.6,2,1],[-10,-34,1.6,2,1],
+  ];
+  const sites={
+    A:{rect:[18,-26,34,-12], plant:[24,-19]},
+    B:{rect:[-34,-26,-18,-14], plant:[-24,-18]},
   };
-  const chokes={A:[24,-6], B:[-24,-6]};
-  const smokePoints={A:[[24,0],[24,-12]], B:[[-24,0],[-24,-12]]};
-  const crates=[];
-  const bends=[[-28,14],[28,14],[-24,-2],[24,-2],[-28,-18],[28,-18],[0,-12]];
-  for(const [x,z] of bends) crates.push([x,z, 2,2,1]);
-  crates.push([28,-28, 2,2,1], [28,-20, 2,2,1], [-28,-28, 2,2,1], [-28,-20, 2,2,1]);
-  crates.push([0,-6, 2,1,0], [-12,0, 1.6,1,0], [12,0, 1.6,1,0]);
-
   MAPS.push(makeMap({
-    id:'yiji', name:'遗迹', desc:'双点·蜿蜒回廊·侧翼小道·包点转角',
+    id:'yiji', name:'遗迹', desc:'双点·石屋巷战·A 高台大院·B 角楼·五路成环',
     sky:{ top:'#3d6b8f', mid:'#9fb8c8', bot:'#d8c9a8', fog:0x9fb8c8, fogFar:170, sun:0xfff2dd, sunPos:[35,60,25], hemi:[0xd8e8f0,0x3a4048] },
     wallTone:0x9aa8ad, accent:0x39d0c9,
-    rooms, corridors, sites, stages, defPostList, atkHolds, chokes, smokePoints, crates,
+    rooms, corridors, innerWalls, roofs, platforms, stairs, crates, sites,
+    stages:{A:[26,0], B:[-27,-3]},
+    defPostList:[
+      {p:[30,-14], look:[31,0]},
+      {p:[20,-17], look:[9,-18]},
+      {p:[4,-14], look:[1,2]},
+      {p:[-26,-16], look:[-27,-4]},
+      {p:[-19,-19], look:[-10,-16]},
+    ],
+    atkHolds:{
+      A:[{p:[25,-20],look:[26,-31]},{p:[32,-16],look:[18,-16]},{p:[19,-14],look:[26,-24]}],
+      B:[{p:[-25,-20],look:[-26,-31]},{p:[-31,-17],look:[-18,-20]},{p:[-20,-16],look:[-31,-23]}],
+    },
+    chokes:{A:[31,-9], B:[-27,-12]},
+    smokePoints:{A:[[31,-13],[24,-15]], B:[[-27,-15],[-22,-17]]},
     spawns:spawnSets(),
-    barriers:stdBarriers([[-34,-7,-22,-6],[-8,-7,8,-6],[22,-7,34,-6]]),
+    barriers:[
+      {rect:[-38,28,38,29], side:'atk'},
+      {rect:[27,-12.6,35,-11.8], side:'def'},
+      {rect:[1,-12.6,9,-11.8], side:'def'},
+      {rect:[-31,-14.6,-23,-13.8], side:'def'},
+      {rect:[13,-12.6,19,-11.8], side:'def'},
+      {rect:[-15,-12.6,-9,-11.8], side:'def'},
+    ],
   }));
 })();
 
-// ---------- santa ----------
+// ============================================================
+// 三塔 santa — 三点·不对称：A 右塔楼，B 中民居，C 左拱廊
+// ============================================================
 (function buildSanta(){
-  const W=3.5;
-  const rooms=[];
-  const corridors=[];
-  rooms.push(room(-38,30,38,38));
-  rooms.push(room(-34,20,-22,28)); // TL
-  rooms.push(room(-8,20,8,28));    // TM
-  rooms.push(room(22,20,34,28));   // TR
-  rooms.push(room(-30,4,-18,12));  // L1
-  rooms.push(room(-8,4,8,12));     // M1
-  rooms.push(room(18,4,30,12));    // R1
-  rooms.push(room(-30,-12,-18,-4)); // L2
-  rooms.push(room(-8,-12,8,-4));    // M2
-  rooms.push(room(18,-12,30,-4));   // R2
-  rooms.push(room(-34,-28,-22,-20)); // C
-  rooms.push(room(-8,-28,8,-20));    // B
-  rooms.push(room(22,-28,34,-20));   // A
-  rooms.push(room(-38,-38,38,-30));  // def spawn
-
-  corridors.push(corridor([[-28,30],[-28,24]],W));
-  corridors.push(corridor([[0,30],[0,24]],W));
-  corridors.push(corridor([[28,30],[28,24]],W));
-  corridors.push(corridor([[-28,20],[-28,14],[-24,14],[-24,8]],W));
-  corridors.push(corridor([[28,20],[28,14],[24,14],[24,8]],W));
-  corridors.push(corridor([[-24,4],[-24,-2],[-28,-2],[-28,-8]],W));
-  corridors.push(corridor([[24,4],[24,-2],[28,-2],[28,-8]],W));
-  corridors.push(corridor([[-28,-12],[-28,-18],[-28,-24]],W));
-  corridors.push(corridor([[28,-12],[28,-18],[28,-24]],W));
-  corridors.push(corridor([[0,20],[0,14],[4,14],[4,8],[0,8],[0,-4],[0,-12],[0,-20]],W));
-  // def spawn connectors
-  corridors.push(corridor([[-28,-30],[-28,-24]],W));
-  corridors.push(corridor([[0,-30],[0,-24]],W));
-  corridors.push(corridor([[28,-30],[28,-24]],W));
-  corridors.push(corridor([[-18,-34],[18,-34]],W-1));
-  corridors.push(corridor([[-22,24],[-12,24],[-12,8],[-18,8]],W-1));
-  corridors.push(corridor([[22,24],[12,24],[12,8],[18,8]],W-1));
-  corridors.push(corridor([[-24,0],[-8,0]],W-1));
-  corridors.push(corridor([[24,0],[8,0]],W-1));
-  corridors.push(corridor([[-22,-8],[-6,-8]],W-1));
-  corridors.push(corridor([[22,-8],[6,-8]],W-1));
-  corridors.push(corridor([[-18,-24],[18,-24]],W-1));
-  corridors.push(corridor([[-8,-20],[8,-20]],W-1));
-
-  const sites={
-    A:{rect:[22,-28,34,-20], plant:[28,-24]},
-    B:{rect:[-8,-28,8,-20], plant:[0,-24]},
-    C:{rect:[-34,-28,-22,-20], plant:[-28,-24]},
-  };
-  const stages={A:[24,-2], B:[0,-2], C:[-24,-2]};
-  const defPostList=[
-    {p:[-24,8], look:[-24,24]},
-    {p:[0,8], look:[0,24]},
-    {p:[24,8], look:[24,24]},
-    {p:[-24,-8], look:[-24,8]},
-    {p:[24,-8], look:[24,8]},
+  const rooms=[
+    room(-36,30,36,38),    // atk spawn
+    room(-34,-38,34,-32),  // def spawn
+    room(22,-24,36,-10),   // A（右塔院）
+    room(-6,-28,8,-16),    // B（中民居）
+    room(-36,-22,-22,-8),  // C（左拱院）
+    room(24,8,36,20),      // 右塔前院
+    room(-6,0,8,12),       // 中市场
+    room(-36,10,-24,22),   // 左拱廊
   ];
-  const atkHolds={
-    A:[{p:[24,-18], look:[24,8]}, {p:[30,-24], look:[0,-24]}],
-    B:[{p:[0,-18], look:[0,8]}, {p:[-6,-24], look:[6,-24]}],
-    C:[{p:[-24,-18], look:[-24,8]}, {p:[-30,-24], look:[0,-24]}],
+  const corridors=[
+    corridor([[30,30],[30,26],[26,26],[26,20]],3),          // 出生→右院
+    corridor([[0,30],[0,24],[4,24],[4,18],[0,18],[0,12]],3),// 出生→中市场（双 S）
+    corridor([[-28,30],[-28,26],[-32,26],[-32,22]],3),      // 出生→左廊
+    corridor([[30,8],[30,0],[33,0],[33,-10]],3),            // 右院→A（折角）
+    corridor([[1,0],[1,-6],[-3,-6],[-3,-12],[1,-12],[1,-16]],3), // 市场→B（双折）
+    corridor([[-30,10],[-30,2],[-26,2],[-26,-8]],3),        // 左廊→C（折角）
+    corridor([[8,6],[16,6],[16,12],[24,12]],2),             // 市场↔右院 窄巷
+    corridor([[-24,14],[-16,14],[-16,6],[-6,6]],2),         // 左廊↔市场 窄巷
+    corridor([[8,-20],[14,-20],[14,-16],[22,-16]],2.2),     // B↔A 折巷
+    corridor([[-6,-20],[-14,-20],[-14,-14],[-22,-14]],2.2), // B↔C 折巷
+    corridor([[29,-32],[29,-22]],3),                        // 防守→A
+    corridor([[1,-32],[1,-28]],3),                          // 防守→B
+    corridor([[-29,-32],[-29,-22]],3),                      // 防守→C
+    corridor([[4,0],[8,0],[8,-8],[16,-8],[16,-12],[22,-12]],2), // 市场→A 蛇形暗道
+    corridor([[-24,0],[-18,0],[-18,-12]],2),                // C 侧环巷（接 B↔C 折巷）
+  ];
+  const innerWalls=[
+    ...house(-4,2,3,9,2.6,{s:[0,2], n:[-3,-1], e:[4,6]}),        // 市场民居
+    ...house(-5,-27,1,-21,2.6,{n:[-3,-1], w:[-25,-23]}),         // B 点民居
+    ...house(-35,-21,-29,-15,2.6,{n:[-34,-32], e:[-19,-17]}),    // C 点石屋
+  ];
+  const roofs=[
+    [-4.5,1.5,3.5,9.5,2.6],
+    [-5.5,-27.5,1.5,-20.5,2.6],
+    [-35.5,-21.5,-28.5,-14.5,2.6],
+    [-35,12,-25,20,2.8],          // 左拱廊顶棚（可从下方穿行）
+  ];
+  const platforms=[
+    [32,14,36,20,1.8],   // 右院高台
+    [31,-24,36,-18,2.2], // A 塔台
+  ];
+  const stairs=[
+    {x1:29,z1:16,x2:32,z2:19,dir:'+x',h:1.8},
+    {x1:27,z1:-23,x2:31,z2:-20,dir:'+x',h:2.2},
+  ];
+  const crates=[
+    // 左拱廊柱子
+    [-33,13,.7,2.7,1],[-33,19,.7,2.7,1],[-27,13,.7,2.7,1],[-27,19,.7,2.7,1],
+    [28,26,1.8,1,0],[-30,26,1.8,1,0],[2,20,1.6,1,0],
+    [31,0,1.8,1,0],[-1,-12,1.4,1,0],[-28,2,1.8,1,0],
+    [26,-14,2,1,0],[29,-19,2.4,2,1],[33,-12,1.6,1,0],[24,-20,1.8,1,0],
+    [5,-18,1.6,1,0],[-24,-19,1.8,1,0],[-31,-10,1.4,1,0],[-27,-19,1.4,1,0],
+    [6,9,1.4,1,0],[26,17,1.6,1,0],
+    [8,-35,1.6,2,1],[-8,-35,1.6,2,1],
+  ];
+  const sites={
+    A:{rect:[22,-24,36,-10], plant:[27,-16]},
+    B:{rect:[-6,-28,8,-16], plant:[4,-20]},
+    C:{rect:[-36,-22,-22,-8], plant:[-26,-12]},
   };
-  const chokes={A:[24,-6], B:[0,-6], C:[-24,-6]};
-  const smokePoints={A:[[24,0],[24,-12]], B:[[0,0],[0,-12]], C:[[-24,0],[-24,-12]]};
-  const crates=[];
-  const bends=[[-28,14],[28,14],[-24,-2],[24,-2],[-28,-18],[28,-18],[4,14],[0,-12]];
-  for(const [x,z] of bends) crates.push([x,z, 2,2,1]);
-  crates.push([28,-28,2,2,1],[28,-20,2,2,1],[-28,-28,2,2,1],[-28,-20,2,2,1]);
-  crates.push([0,-6,2,1,0],[-12,0,1.6,1,0],[12,0,1.6,1,0]);
-
   MAPS.push(makeMap({
-    id:'santa', name:'三塔', desc:'三点位·折返长廊·中路转角·包点环道',
+    id:'santa', name:'三塔', desc:'三点·右塔台·中民居·左拱廊·蛇形暗道',
     sky:{ top:'#5a3a6b', mid:'#c8907f', bot:'#f0c8a0', fog:0xc8a08c, fogFar:180, sun:0xffd8b0, sunPos:[-40,55,20], hemi:[0xf0d8c8,0x403238] },
     wallTone:0xa89a8c, accent:0xf5c56b,
-    rooms, corridors, sites, stages, defPostList, atkHolds, chokes, smokePoints, crates,
+    rooms, corridors, innerWalls, roofs, platforms, stairs, crates, sites,
+    stages:{A:[30,4], B:[-1,-9], C:[-26,-1]},
+    defPostList:[
+      {p:[32,-13], look:[33,0]},
+      {p:[24,-13], look:[15,-9]},
+      {p:[3,-18], look:[1,-6]},
+      {p:[-26,-11], look:[-26,1]},
+      {p:[-23,-12], look:[-18,-3]},
+    ],
+    atkHolds:{
+      A:[{p:[28,-18],look:[29,-30]},{p:[33,-14],look:[23,-14]},{p:[24,-12],look:[30,-22]}],
+      B:[{p:[4,-22],look:[1,-30]},{p:[6,-18],look:[-5,-19]},{p:[-3,-17],look:[7,-22]}],
+      C:[{p:[-28,-13],look:[-29,-30]},{p:[-33,-11],look:[-23,-11]},{p:[-24,-10],look:[-32,-18]}],
+    },
+    chokes:{A:[33,-7], B:[1,-14], C:[-26,-6]},
+    smokePoints:{A:[[33,-10],[28,-13]], B:[[1,-16],[3,-18]], C:[[-26,-9],[-28,-12]]},
     spawns:spawnSets(),
-    barriers:stdBarriers([[-34,-7,-22,-6],[-8,-7,8,-6],[22,-7,34,-6]]),
+    barriers:[
+      {rect:[-38,28,38,29], side:'atk'},
+      {rect:[29,-10.6,37,-9.8], side:'def'},
+      {rect:[21.6,-14.2,22.4,-9.8], side:'def'},
+      {rect:[-3,-16.6,5,-15.8], side:'def'},
+      {rect:[-30,-8.6,-22,-7.8], side:'def'},
+      {rect:[-21,-11.6,-15,-10.8], side:'def'},
+      {rect:[13,-9.4,19,-8.6], side:'def'},
+    ],
   }));
 })();
 
-// ---------- liexia ----------
+// ============================================================
+// 裂峡 liexia — 双点·极不对称：A 在右下深谷，B 在左侧半山（更靠北）
+// ============================================================
 (function buildLiexia(){
-  const W=3.5;
-  const rooms=[];
-  const corridors=[];
-  rooms.push(room(-34,30,34,38)); // atk spawn
-  rooms.push(room(-34,-38,34,-30)); // def spawn
-  rooms.push(room(-28,18,-16,26)); // TL
-  rooms.push(room(-6,18,6,26));    // TM
-  rooms.push(room(16,18,28,26));   // TR
-  rooms.push(room(-28,2,-16,10));  // ML
-  rooms.push(room(-6,2,6,10));     // MM
-  rooms.push(room(16,2,28,10));    // MR
-  rooms.push(room(-28,-14,-16,-6)); // LL
-  rooms.push(room(-6,-14,6,-6));    // LM
-  rooms.push(room(16,-14,28,-6));   // LR
-  rooms.push(room(-30,-28,-14,-20)); // B
-  rooms.push(room(14,-28,30,-20));   // A
-
-  corridors.push(corridor([[-22,30],[-22,22]],W));
-  corridors.push(corridor([[0,30],[0,22]],W));
-  corridors.push(corridor([[22,30],[22,22]],W));
-  corridors.push(corridor([[-22,18],[-22,12],[-26,12],[-26,6],[-22,6]],W));
-  corridors.push(corridor([[22,18],[22,12],[26,12],[26,6],[22,6]],W));
-  corridors.push(corridor([[-22,2],[-22,-4],[-26,-4],[-26,-10],[-22,-10]],W));
-  corridors.push(corridor([[22,2],[22,-4],[26,-4],[26,-10],[22,-10]],W));
-  corridors.push(corridor([[-22,-14],[-22,-20],[-22,-24]],W));
-  corridors.push(corridor([[22,-14],[22,-20],[22,-24]],W));
-  corridors.push(corridor([[0,18],[0,10],[0,2],[4,2],[4,-6],[0,-6],[0,-14],[0,-20]],W));
-  // def spawn connectors
-  corridors.push(corridor([[-22,-30],[-22,-24]],W));
-  corridors.push(corridor([[22,-30],[22,-24]],W));
-  corridors.push(corridor([[0,-30],[0,-24]],W));
-  corridors.push(corridor([[-14,-34],[14,-34]],W-1));
-  corridors.push(corridor([[-16,22],[-8,22],[-8,6],[-16,6]],W-1));
-  corridors.push(corridor([[16,22],[8,22],[8,6],[16,6]],W-1));
-  corridors.push(corridor([[-22,0],[0,0]],W-1));
-  corridors.push(corridor([[22,0],[0,0]],W-1));
-  corridors.push(corridor([[-16,-10],[-6,-10]],W-1));
-  corridors.push(corridor([[16,-10],[6,-10]],W-1));
-  corridors.push(corridor([[-14,-24],[14,-24]],W-1));
-
-  const sites={
-    A:{rect:[14,-28,30,-20], plant:[22,-24]},
-    B:{rect:[-30,-28,-14,-20], plant:[-22,-24]},
-  };
-  const stages={A:[22,-2], B:[-22,-2]};
-  const defPostList=[
-    {p:[-22,6], look:[-22,22]},
-    {p:[0,6], look:[0,22]},
-    {p:[22,6], look:[22,22]},
-    {p:[-22,-10], look:[-22,2]},
-    {p:[22,-10], look:[22,2]},
+  const rooms=[
+    room(-34,30,34,38),    // atk spawn
+    room(-30,-38,30,-30),  // def spawn
+    room(16,-28,32,-14),   // A（右下谷底）
+    room(-32,-20,-16,-6),  // B（左侧半山，更靠北 → 不对称）
+    room(18,8,32,20),      // 右村
+    room(-32,6,-18,18),    // 左台地
+    room(-8,-8,6,4),       // 中村
   ];
-  const atkHolds={
-    A:[{p:[22,-18], look:[22,2]}, {p:[26,-24], look:[0,-24]}, {p:[18,-24], look:[26,-24]}],
-    B:[{p:[-22,-18], look:[-22,2]}, {p:[-26,-24], look:[0,-24]}, {p:[-18,-24], look:[-26,-24]}],
+  const corridors=[
+    corridor([[24,30],[24,24],[28,24],[28,20]],3),          // 出生→右村
+    corridor([[-2,30],[-2,24],[2,24],[2,16],[-2,16],[-2,4]],3), // 出生→中村（长蛇形）
+    corridor([[-24,30],[-24,24],[-20,24],[-20,18]],3),      // 出生→左台地
+    corridor([[26,8],[26,0],[22,0],[22,-8],[26,-8],[26,-14]],3), // 右村→A（双 S 峡道）
+    corridor([[4,-4],[10,-4],[10,-10],[16,-10],[16,-16]],2.2),   // 中村→A 蛇形小道
+    corridor([[-26,6],[-26,0],[-22,0],[-22,-6]],3),         // 台地→B（折角）
+    corridor([[-8,-2],[-14,-2],[-14,-9],[-16,-9]],2.2),     // 中村→B 小道
+    corridor([[0,-8],[0,-14],[4,-14],[4,-22],[0,-22],[0,-30]],3), // 中村→谷底→防守出生（蛇形）
+    corridor([[24,-30],[24,-26]],3),                        // 防守→A
+    corridor([[-24,-20],[-24,-26],[-20,-26],[-20,-30]],3),  // 防守→B（绕山折道）
+    corridor([[7,-20],[16,-20]],2),                         // 谷道↔A 窄口
+    corridor([[-3,-12],[-10,-12],[-10,-16],[-16,-16]],2),   // 谷道↔B 暗巷
+    corridor([[18,12],[12,12],[12,4],[6,4]],2),             // 右村↔中村 窄巷
+    corridor([[-18,10],[-12,10],[-12,2],[-8,2]],2),         // 台地↔中村 窄巷
+  ];
+  const innerWalls=[
+    ...house(21,10,27,16,2.6,{s:[23,25], e:[12,14]}),        // 右村民居
+    ...house(-6,-6,0,0,2.6,{n:[-4,-2], e:[-4,-2]}),          // 中村民居
+    ...house(-30,-18,-24,-12,2.6,{e:[-16,-14], n:[-28,-26]}),// B 半山石屋
+  ];
+  const roofs=[
+    [20.5,9.5,27.5,16.5,2.6],
+    [-6.5,-6.5,.5,.5,2.6],
+    [-30.5,-18.5,-23.5,-11.5,2.6],
+    [-5,4,1,7,2.8],       // 中村北口过街拱
+    [20,-8,28,-5,3],      // 峡道石拱
+  ];
+  const platforms=[
+    [27,-28,32,-22,2],    // A 谷侧高台
+    [-32,12,-26,18,1.8],  // 左台地高点
+  ];
+  const stairs=[
+    {x1:23,z1:-24,x2:27,z2:-21,dir:'+x',h:2},
+    {x1:-31,z1:9,x2:-28,z2:12,dir:'+z',h:1.8},
+  ];
+  const crates=[
+    [26,24,1.8,1,0],[-22,24,1.8,1,0],[0,20,1.6,1,0],
+    [22,-4,1.8,1,0],[26,-8,1.6,1,0],
+    [20,-18,2,1,0],[24,-24,2.4,2,1],[30,-16,1.6,1,0],
+    [-20,-16,1.8,1,0],[-28,-8,1.6,1,0],[-18,-8,1.4,1,0],
+    [-3,-3,1.2,1,0],[30,12,1.6,1,0],[-22,14,1.8,1,0],
+    [8,-33,1.6,2,1],[-8,-33,1.6,2,1],
+  ];
+  const sites={
+    A:{rect:[16,-28,32,-14], plant:[22,-20]},
+    B:{rect:[-32,-20,-16,-6], plant:[-20,-12]},
   };
-  const chokes={A:[22,-6], B:[-22,-6]};
-  const smokePoints={A:[[22,0],[22,-12]], B:[[-22,0],[-22,-12]]};
-  const crates=[];
-  const bends=[[-22,12],[22,12],[-26,6],[26,6],[-26,-4],[26,-4],[-22,-20],[22,-20],[4,-6]];
-  for(const [x,z] of bends) crates.push([x,z, 2,2,1]);
-  crates.push([22,-28,2,2,1],[22,-20,2,2,1],[-22,-28,2,2,1],[-22,-20,2,2,1]);
-  crates.push([0,-6,2,1,0],[-10,0,1.6,1,0],[10,0,1.6,1,0]);
-
   MAPS.push(makeMap({
-    id:'liexia', name:'裂峡', desc:'双点·峡谷弯道·中路折线·底部环通',
+    id:'liexia', name:'裂峡', desc:'双点·A 深谷石拱·B 半山石屋·蛇形谷道',
     sky:{ top:'#1d3a50', mid:'#4a6a80', bot:'#8fb0a0', fog:0x5a7a88, fogFar:130, sun:0xcfe8ff, sunPos:[20,50,-30], hemi:[0xb8d0dd,0x28323a] },
     wallTone:0x7f909a, accent:0xff4655,
-    rooms, corridors, sites, stages, defPostList, atkHolds, chokes, smokePoints, crates,
+    rooms, corridors, innerWalls, roofs, platforms, stairs, crates, sites,
+    stages:{A:[24,-4], B:[-24,3]},
+    defPostList:[
+      {p:[25,-17], look:[26,-6]},
+      {p:[17,-17], look:[10,-10]},
+      {p:[2,-16], look:[0,-6]},
+      {p:[-21,-10], look:[-22,1]},
+      {p:[-17,-12], look:[-13,-6]},
+    ],
+    atkHolds:{
+      A:[{p:[22,-22],look:[24,-32]},{p:[29,-18],look:[16,-18]},{p:[18,-16],look:[26,-26]}],
+      B:[{p:[-22,-16],look:[-22,-28]},{p:[-28,-9],look:[-16,-9]},{p:[-18,-10],look:[-28,-16]}],
+    },
+    chokes:{A:[26,-11], B:[-22,-3]},
+    smokePoints:{A:[[26,-14],[20,-16]], B:[[-22,-6],[-24,-10]]},
     spawns:spawnSets(),
-    barriers:stdBarriers([[-30,-7,-14,-6],[-6,-7,6,-6],[14,-7,30,-6]]),
+    barriers:[
+      {rect:[-36,28,36,29], side:'atk'},
+      {rect:[22,-14.6,30,-13.8], side:'def'},
+      {rect:[13,-14.6,19,-13.8], side:'def'},
+      {rect:[-13,-11.6,4,-10.8], side:'def'},
+      {rect:[-26,-6.6,-18,-5.8], side:'def'},
+      {rect:[-16.4,-11.4,-15.6,-6.6], side:'def'},
+    ],
   }));
 })();
 

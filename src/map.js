@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { G } from "./state.js";
 import { V3, rayAABB, dist2d } from "./utils.js";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=7";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=8";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -657,6 +657,7 @@ export function buildColliders(md, open){
   for(const[x1,z1,x2,z2,h]of(md.platforms||[])) colliders.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});
   for(const s of(md.stairs||[])) for(const b of buildStairBoxes(s)) colliders.push(b);
   for(const[cx,cz,s,h]of(md.crates||[])) colliders.push({min:V3(cx-s/2,0,cz-s/2),max:V3(cx+s/2,h,cz+s/2)});
+  for(const[x1,z1,x2,z2,y]of(md.roofs||[])) colliders.push({min:V3(x1,y,z1),max:V3(x2,y+.25,z2)});
   return colliders;
 }
 
@@ -665,7 +666,7 @@ export function buildNav(md, colliders){
   const open = md.open;
   const MARGIN = 0.45;                 // 与墙体/掩体保持距离（避免被矮箱卡住）
   const inAny = (x,z)=>open.some(r=>inRect(x,z,r));
-  const inSolid = (x,z)=>colliders.some(b=>b.max.y>=0.45 && inRect(x,z,[b.min.x-MARGIN,b.min.z-MARGIN,b.max.x+MARGIN,b.max.z+MARGIN]));
+  const inSolid = (x,z)=>colliders.some(b=>b.max.y>=0.45 && b.min.y<=1.4 && inRect(x,z,[b.min.x-MARGIN,b.min.z-MARGIN,b.max.x+MARGIN,b.max.z+MARGIN]));
 
   const cells = new Map();             // key "ix,iz" -> {x,z}
   for(let ix=-40;ix<40;ix++){
@@ -855,6 +856,82 @@ function letterTexture(ch,color){
   return new THREE.CanvasTexture(c);
 }
 
+let winT=null;
+function windowTexture(){
+  if(winT)return winT;
+  const c=document.createElement('canvas');c.width=128;c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#3a444c';g.fillRect(0,0,128,256);
+  for(let y=14;y<244;y+=34){
+    for(let x=12;x<116;x+=28){
+      const lit=Math.random()<.3;
+      g.fillStyle=lit?'#ffd98a':'#232c33';
+      g.fillRect(x,y,16,22);
+      if(lit){g.fillStyle='rgba(255,217,138,.25)';g.fillRect(x-3,y-3,22,28);}
+    }
+  }
+  winT=new THREE.CanvasTexture(c);winT.colorSpace=THREE.SRGBColorSpace;
+  return winT;
+}
+
+// 地图外围环境：环形城镇建筑 + 树木 + 远山剪影
+function addEnvironment(scene, md){
+  let seed=0;for(const ch of md.id)seed+=ch.charCodeAt(0)*7;
+  const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+  const grp=new THREE.Group();
+  const boxGeo=new THREE.BoxGeometry(1,1,1);
+  const winTex=windowTexture();
+  const bMats=[
+    new THREE.MeshStandardMaterial({map:winTex,color:md.wallTone,roughness:.92}),
+    new THREE.MeshStandardMaterial({map:winTex,color:new THREE.Color(md.wallTone).offsetHSL(0,.02,-.08),roughness:.92}),
+    new THREE.MeshStandardMaterial({map:winTex,color:new THREE.Color(md.wallTone).offsetHSL(.02,.03,.05),roughness:.92}),
+  ];
+  const roofMat=new THREE.MeshStandardMaterial({color:0x33302c,roughness:.95});
+  // 环形建筑群
+  const N=34;
+  for(let i=0;i<N;i++){
+    const ang=i/N*Math.PI*2+rnd()*.16;
+    const rad=54+rnd()*24;
+    const w=5+rnd()*9,d=5+rnd()*9,h=5+rnd()*15;
+    const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
+    const m=new THREE.Mesh(boxGeo,bMats[i%3]);
+    m.scale.set(w,h,d);m.position.set(x,h/2-.8,z);m.rotation.y=rnd()*Math.PI;
+    grp.add(m);
+    if(rnd()<.55){
+      const r=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.75,2.5+rnd()*3,4),roofMat);
+      r.position.set(x,h-.8+1.4,z);r.rotation.y=m.rotation.y+Math.PI/4;grp.add(r);
+    }
+  }
+  // 树木
+  const trunkMat=new THREE.MeshStandardMaterial({color:0x4a3826,roughness:.95});
+  const leafMat=new THREE.MeshStandardMaterial({color:0x2e5c3a,roughness:.95});
+  const leafMat2=new THREE.MeshStandardMaterial({color:0x3a6b42,roughness:.95});
+  for(let i=0;i<24;i++){
+    const ang=i/24*Math.PI*2+rnd()*.3;
+    const rad=45+rnd()*9;
+    const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
+    const s=.8+rnd()*.7;
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,1.6*s,5),trunkMat);
+    trunk.position.set(x,.8*s,z);grp.add(trunk);
+    const l1=new THREE.Mesh(new THREE.ConeGeometry(1.3*s,2.4*s,6),i%2?leafMat:leafMat2);
+    l1.position.set(x,1.6*s+1.1*s,z);grp.add(l1);
+    const l2=new THREE.Mesh(new THREE.ConeGeometry(.95*s,1.8*s,6),i%2?leafMat2:leafMat);
+    l2.position.set(x,1.6*s+2.2*s,z);grp.add(l2);
+  }
+  // 远山剪影
+  const mtnMat=new THREE.MeshBasicMaterial({color:new THREE.Color(md.sky.fog).offsetHSL(0,0,-.12)});
+  for(let i=0;i<9;i++){
+    const ang=i/9*Math.PI*2+rnd()*.4;
+    const rad=95+rnd()*30;
+    const h=22+rnd()*26,r=26+rnd()*22;
+    const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,5),mtnMat);
+    m.position.set(Math.cos(ang)*rad,h/2-4,Math.sin(ang)*rad);
+    m.rotation.y=rnd()*Math.PI;grp.add(m);
+  }
+  grp.traverse(o=>{o.matrixAutoUpdate=false;o.updateMatrix();});
+  scene.add(grp);
+}
+
 export function buildMap(scene, mapId){
   const md = MAPS.find(m=>m.id===mapId)||MAPS[0];
   const open = md.open.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
@@ -927,6 +1004,25 @@ export function buildMap(scene, mapId){
   const ct0=crateTexture();
   for(const[cx,cz,s,h,tone]of md.crates){const m=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),new THREE.MeshStandardMaterial({map:tone?mt0:ct0,roughness:.85,metalness:tone?.25:0}));m.position.set(cx,h/2,cz);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push({min:V3(cx-s/2,0,cz-s/2),max:V3(cx+s/2,h,cz+s/2)});mmExtra.push({x1:cx-s/2,z1:cz-s/2,x2:cx+s/2,z2:cz+s/2,type:'crate'});}
 
+  // 屋顶（可从下方穿行）：平板 + 屋脊 + 檐口发光条
+  const roofMat=new THREE.MeshStandardMaterial({color:0x4a3f36,roughness:.9,metalness:.05});
+  const ridgeMat=new THREE.MeshStandardMaterial({color:0x3a322b,roughness:.9});
+  for(const[x1,z1,x2,z2,y]of(md.roofs||[])){
+    const w=x2-x1,d=z2-z1;
+    const slab=new THREE.Mesh(new THREE.BoxGeometry(w,.25,d),roofMat);
+    slab.position.set((x1+x2)/2,y+.125,(z1+z2)/2);slab.castShadow=true;slab.receiveShadow=true;scene.add(slab);
+    // 简易坡屋脊
+    const ridge=new THREE.Mesh(new THREE.BoxGeometry(w>d?w:.5,.55,w>d?.5:d),ridgeMat);
+    ridge.position.set((x1+x2)/2,y+.5,(z1+z2)/2);ridge.castShadow=true;scene.add(ridge);
+    const trim=new THREE.Mesh(new THREE.BoxGeometry(w,.08,.1),new THREE.MeshStandardMaterial({color:md.accent,emissive:md.accent,emissiveIntensity:1.2}));
+    trim.position.set((x1+x2)/2,y+.02,z1+.05);scene.add(trim);
+    const trim2=trim.clone();trim2.position.z=z2-.05;scene.add(trim2);
+    colliders.push({min:V3(x1,y,z1),max:V3(x2,y+.25,z2)});
+  }
+
+  // 周围环境装饰（地图边界外：城镇建筑、树木、远山）
+  addEnvironment(scene, md);
+
   G.colliders = colliders;
 
   // 自动生成网格导航图
@@ -950,7 +1046,7 @@ export function buildMap(scene, mapId){
   function safeSpawn(pos){
     const open=G.map.openRects;
     const inAny=(x,z)=>open.some(r=>x>=r[0]&&x<=r[2]&&z>=r[1]&&z<=r[3]);
-    const inSolid=(x,z)=>G.colliders.some(b=>b.max.y>0.5 && x>=b.min.x-0.35 && x<=b.max.x+0.35 && z>=b.min.z-0.35 && z<=b.max.z+0.35);
+    const inSolid=(x,z)=>G.colliders.some(b=>b.max.y>0.5 && b.min.y<=1.4 && x>=b.min.x-0.35 && x<=b.max.x+0.35 && z>=b.min.z-0.35 && z<=b.max.z+0.35);
     if(inAny(pos.x,pos.z) && !inSolid(pos.x,pos.z)) return;
     let best=null,bd=Infinity;
     for(const w of G.map.wps){
@@ -989,7 +1085,7 @@ export function pathClear(a,b, margin=.35){
   const px = -dz/l2*margin, pz = dx/l2*margin;
   for(const list of [G.colliders, G.dynColliders]){
     for(const box of list){
-      if(box.max.y < .45) continue; // 可跨过的矮掩体不算挡路
+      if(box.max.y < .45 || box.min.y > 1.8) continue; // 可跨过的矮掩体 / 可从下方穿过的屋顶不算挡路
       for(const off of [[0,0],[px,pz],[-px,-pz]]){
         const o = V3(a.x+off[0], a.y, a.z+off[1]);
         const dir = V3(dx,dy,dz); dir.divideScalar(len);

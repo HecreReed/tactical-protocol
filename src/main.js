@@ -3,10 +3,10 @@ import { G } from './state.js';
 import { buildMap } from './map.js';
 import { initFX, updateFX, pulseBarriers } from './effects.js';
 import { initAudio } from './audio.js';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=8';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=8';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=9';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=9';
 import { updateBots } from './bots.js';
-import { startMatch, updateGame } from './game.js?v=8';
+import { startMatch, updateGame } from './game.js?v=9';
 import { updateProjectiles, tickHealAndZones } from './abilities.js';
 
 let started = false;
