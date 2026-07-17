@@ -925,11 +925,54 @@ export function nearestWp(pos){
   G.map.wps.forEach((w,i)=>{const d=dist2d(w,pos)+Math.abs((w.y-1.1)-pos.y)*2;if(d<bd){bd=d;best=i;}});
   return best;
 }
+// 路径线段是否畅通（带玩家半径余量，检查静态和动态碰撞体）
+export function pathClear(a,b, margin=.35){
+  const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
+  const len = Math.hypot(dx,dy,dz); if(len<1e-4) return true;
+  const l2 = Math.hypot(dx,dz)||1;
+  const px = -dz/l2*margin, pz = dx/l2*margin;
+  for(const list of [G.colliders, G.dynColliders]){
+    for(const box of list){
+      if(box.max.y < .45) continue; // 可跨过的矮掩体不算挡路
+      for(const off of [[0,0],[px,pz],[-px,-pz]]){
+        const o = V3(a.x+off[0], a.y, a.z+off[1]);
+        const dir = V3(dx,dy,dz); dir.divideScalar(len);
+        if(rayAABB(o, dir, box, len) < len) return false;
+        if(rayAABB(V3(o.x,o.y-.55,o.z), dir, box, len) < len) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function smoothPath(indices){
+  if(indices.length<3) return indices;
+  for(let pass=0;pass<3;pass++){
+    const out=[indices[0]];
+    let i=0;
+    while(i<indices.length-2){
+      if(pathClear(G.map.wps[indices[i]], G.map.wps[indices[i+2]], .35)){
+        i+=2;
+      } else {
+        out.push(indices[i+1]);
+        i++;
+      }
+    }
+    out.push(indices[indices.length-1]);
+    if(out.length===indices.length) break;
+    indices = out;
+  }
+  return indices;
+}
+
 export function findPath(fromPos,toPos){
-  const a=nearestWp(fromPos),b=nearestWp(toPos);
-  const{wps,edges}=G.map;if(a===b)return[wps[b]];
-  const prev=new Array(wps.length).fill(-1),q=[a];prev[a]=a;
-  while(q.length){const cur=q.shift();if(cur===b)break;for(const nx of edges[cur])if(prev[nx]===-1){prev[nx]=cur;q.push(nx);}}
-  if(prev[b]===-1)return[wps[b]];
-  const path=[];let c=b;while(c!==a){path.push(wps[c]);c=prev[c];}path.reverse();return path;
+  const a=nearestWp(fromPos), b=nearestWp(toPos);
+  const {wps,edges}=G.map;
+  if(a===b) return [wps[b].clone ? wps[b].clone() : V3(wps[b].x,wps[b].y,wps[b].z)];
+  const prev=new Array(wps.length).fill(-1), q=[a]; prev[a]=a;
+  while(q.length){ const cur=q.shift(); if(cur===b) break; for(const nx of edges[cur]) if(prev[nx]===-1){ prev[nx]=cur; q.push(nx); } }
+  if(prev[b]===-1) return [wps[b]];
+  const raw=[]; let c=b; while(c!==a){ raw.push(c); c=prev[c]; } raw.push(a); raw.reverse();
+  const smooth = smoothPath(raw);
+  return smooth.map(i=> wps[i].clone ? wps[i].clone() : V3(wps[i].x,wps[i].y,wps[i].z));
 }

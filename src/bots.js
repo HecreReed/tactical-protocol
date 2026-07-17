@@ -1,7 +1,7 @@
 import { G } from './state.js';
 import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js';
 import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js';
-import { findPath, inSite, nearestWp } from './map.js';
+import { findPath, inSite, nearestWp, pathClear } from './map.js';
 import { useAbility, botCast } from './abilities.js';
 import { sfx } from './audio.js';
 
@@ -69,12 +69,34 @@ function setPath(bot, dest){
   a.repathT = G.now + 3;
 }
 
+function lookaheadTarget(bot, path, pathI){
+  const maxSteps = 5, maxD = 6.5;
+  let best = pathI;
+  for(let i = pathI + 1; i < path.length && i <= pathI + maxSteps; i++){
+    const wp = path[i];
+    if(dist2d(bot.pos, wp) > maxD) break;
+    if(pathClear(bot.pos, wp, .35)) best = i;
+  }
+  return path[best];
+}
+
 function followPath(bot, dt, sprint=true){
   const a = bot.ai;
   if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
-  const wp = a.path[a.pathI];
-  const d = dist2d(bot.pos, wp);
-  if(d < .9){ a.pathI++; return followPath(bot, dt, sprint); }
+
+  // 如果已经越过当前节点且能看见下一段，就推进索引，避免切角后卡住
+  while(a.pathI < a.path.length - 1){
+    const cur = a.path[a.pathI], nxt = a.path[a.pathI+1];
+    const dx = nxt.x - cur.x, dz = nxt.z - cur.z;
+    const len2 = dx*dx + dz*dz;
+    if(len2 < 1e-4){ a.pathI++; continue; }
+    const t = ((bot.pos.x - cur.x)*dx + (bot.pos.z - cur.z)*dz) / len2;
+    if(t > 0.75 && pathClear(bot.pos, nxt, .35)){ a.pathI++; }
+    else break;
+  }
+  if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
+
+  const wp = lookaheadTarget(bot, a.path, a.pathI);
   const ty = yawTo(bot.pos, wp);
   if(!a.target){
     bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*8);
@@ -82,31 +104,42 @@ function followPath(bot, dt, sprint=true){
   }
   const spd = moveSpeed(bot) * (sprint?1:.55);
   const dx = wp.x - bot.pos.x, dz = wp.z - bot.pos.z;
-  const l = Math.hypot(dx,dz);
+  const l = Math.hypot(dx,dz)||1;
   let mx = dx/l, mz = dz/l;
 
+  // 卡死恢复侧移：沿着面朝方向左右平移，并实时检测侧向空间
   if(a.sideUntil && G.now < a.sideUntil){
-    const px = Math.cos(bot.yaw), pz = -Math.sin(bot.yaw);
-    bot.vel.x = px*a.sideDir*spd;
-    bot.vel.z = pz*a.sideDir*spd;
+    const rightX = Math.cos(bot.yaw), rightZ = -Math.sin(bot.yaw);
+    const sideX = rightX * a.sideDir, sideZ = rightZ * a.sideDir;
+    const sideD = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z), V3(sideX,0,sideZ), 1.0);
+    if(sideD < .6){ a.sideDir *= -1; }
+    bot.vel.x = rightX * a.sideDir * spd;
+    bot.vel.z = rightZ * a.sideDir * spd;
     return false;
   }
 
-  // 前向避障（0.7m 探测高于可跨步 0.55，台阶不触发）
+  // 前方障碍探测与绕障
   const feet = V3(bot.pos.x, bot.pos.y+.7, bot.pos.z);
   const fwd = V3(mx,0,mz);
-  const aheadD = rayWalls(feet, fwd, 1.4);
+  const aheadD = rayWalls(feet, fwd, 1.5);
   if(aheadD < 1.2){
-    const high = rayWalls(V3(bot.pos.x, bot.pos.y+1.35, bot.pos.z), fwd, 1.6);
+    const high = rayWalls(V3(bot.pos.x, bot.pos.y+1.35, bot.pos.z), fwd, 1.7);
     if(high > 1.5 && bot.grounded && aheadD < 1.0){
       bot.vel.y = 5.2; bot.grounded = false;
     } else if(high <= 1.5){
-      const ld = rayWalls(feet, V3(-mz,0,mx), 2.2);
-      const rd = rayWalls(feet, V3(mz,0,-mx), 2.2);
-      const sx = ld > rd ? -mz : mz;
-      const sz = ld > rd ? mx : -mx;
-      mx = mx*.35 + sx*.9; mz = mz*.35 + sz*.9;
-      const n = Math.hypot(mx,mz); mx/=n; mz/=n;
+      const leftX = -mz, leftZ = mx;
+      const rightX = mz, rightZ = -mx;
+      const ld = rayWalls(feet, V3(leftX,0,leftZ), 1.4);
+      const rd = rayWalls(feet, V3(rightX,0,rightZ), 1.4);
+      if(ld > .8 || rd > .8){
+        const sx = ld > rd ? leftX : rightX;
+        const sz = ld > rd ? leftZ : rightZ;
+        mx = mx*.35 + sx*.85; mz = mz*.35 + sz*.85;
+        const n = Math.hypot(mx,mz); mx/=n; mz/=n;
+      } else {
+        // 两侧都堵：减速等待路径转向或触发卡死恢复
+        mx *= .25; mz *= .25;
+      }
     }
   }
 
@@ -123,30 +156,44 @@ function followPath(bot, dt, sprint=true){
 
 function stuckCheck(bot, dt){
   const a = bot.ai;
-  const intent = Math.hypot(bot.vel.x, bot.vel.z) > 1;
+  const speed = Math.hypot(bot.vel.x, bot.vel.z);
+  const intent = speed > 1;
   const moved = dist2d(bot.pos, a.lastPos);
   a.lastPos.copy(bot.pos);
-  if(intent && moved < .025){
+
+  // 同时观察朝向目标的整体推进，避免贴墙蹭动被误判为正常
+  let progress = 0;
+  if(a.goal){
+    const gd = dist2d(bot.pos, a.goal);
+    progress = (a.lastGoalDist || gd) - gd;
+    a.lastGoalDist = gd;
+  }
+
+  if(intent && moved < .03 && progress < .02){
     a.stuckT += dt;
-    if(a.stuckT > .7 && (!a.sideUntil || G.now > a.sideUntil + .5)){
-      a.sideDir = Math.random()<.5?1:-1;
-      a.sideUntil = G.now + .55;
+    if(a.stuckT > .5 && (!a.sideUntil || G.now > a.sideUntil + .4)){
+      // 选择侧向空间更大的一边
+      const rightX = Math.cos(bot.yaw), rightZ = -Math.sin(bot.yaw);
+      const leftD = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z), V3(-rightX,0,-rightZ), 1.2);
+      const rightD = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z), V3(rightX,0,rightZ), 1.2);
+      a.sideDir = leftD > rightD ? -1 : 1;
+      a.sideUntil = G.now + .6;
     }
-    if(a.stuckT > 1.8 && a.goal){
+    if(a.stuckT > 1.2 && a.goal){
       setPath(bot, a.goal);
-      a.stuckT = 1.0;
+      a.stuckT = .6;
     }
-    if(a.stuckT > 4 && !a.target){
-      // 兜底：拉回最近导航点（仅水平面），杜绝卡进墙体
+    if(a.stuckT > 2.5 && !a.target){
+      // 兜底：拉回最近可达导航点（水平面），杜绝卡进墙体
       const w = G.map.wps[nearestWp(bot.pos)];
       bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(bot.pos.y, w.y - 1.1);
       bot.vel.set(0,0,0);
-      a.stuckT = 0; a.sideUntil = 0;
+      a.stuckT = 0; a.sideUntil = 0; a.lastGoalDist = undefined;
       if(a.goal) setPath(bot, a.goal);
     }
-  } else if(moved > .06){
-    a.stuckT = Math.max(0, a.stuckT - dt*2);
-    if(a.stuckT === 0) a.sideUntil = 0;
+  } else if(moved > .05 || progress > .04){
+    a.stuckT = Math.max(0, a.stuckT - dt*2.5);
+    if(a.stuckT <= 0){ a.stuckT = 0; a.sideUntil = 0; }
   }
 }
 
@@ -205,20 +252,28 @@ function combatUpdate(bot, dt){
     }
   }
 
-  // 移动：开火急停 / 拉扯 / 远距蹲射
+  // 移动：Valorant 风格“停住再打” + 安全横移
   const firing = a.burstLeft > 0 && G.now >= a.reactAt;
   bot.crouch = firing && d > 22 && D() > .75;
   a.strafeT -= dt;
-  if(a.strafeT <= 0){ a.strafeT = rand(.3,.7); a.strafeDir = Math.random()<.5?-1:1; if(Math.random()<.2) a.strafeDir=0; }
-  const stand = w.def.cat==='sniper' || d > 35 || (firing && D() > .7);
-  if(!stand && !bot.channel){
+  if(a.strafeT <= 0){
+    a.strafeT = rand(.35, .7);
+    // 优先尝试有空间的左右，都不行就原地站定
     const px = Math.cos(bot.yaw), pz = -Math.sin(bot.yaw);
-    // 横移撞墙 → 立即换向
-    if(a.strafeDir){
-      const sd = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z),
-        V3(px*a.strafeDir,0,pz*a.strafeDir), .9);
-      if(sd < .8){ a.strafeDir *= -1; a.strafeT = rand(.4,.8); }
+    const eye = eyePos(bot);
+    const leftD = rayWalls(eye, V3(-px,0,-pz), 1.2);
+    const rightD = rayWalls(eye, V3(px,0,pz), 1.2);
+    const order = Math.random() < .5 ? [-1, 1, 0] : [1, -1, 0];
+    a.strafeDir = 0;
+    for(const dir of order){
+      if(dir === 0){ a.strafeDir = 0; break; }
+      const sd = dir < 0 ? leftD : rightD;
+      if(sd > .75){ a.strafeDir = dir; break; }
     }
+  }
+  const wantStand = w.def.cat==='sniper' || d > 35 || (firing && d > 8) || (firing && D() > .55);
+  if(!wantStand && !bot.channel){
+    const px = Math.cos(bot.yaw), pz = -Math.sin(bot.yaw);
     const spd = moveSpeed(bot)*.7;
     bot.vel.x = px*a.strafeDir*spd;
     bot.vel.z = pz*a.strafeDir*spd;
@@ -607,7 +662,9 @@ function thinkDefend(bot){
   if(sp.state==='planted'){
     const defenders = G.ents.filter(e=>e.alive && sideOf(e)==='def' && !e.isPlayer);
     const d3 = Math.hypot(bot.pos.x-sp.pos.x, bot.pos.y-sp.pos.y, bot.pos.z-sp.pos.z);
-    if(defenders[0]===bot && d3 < 2.2){
+    // 只有在安全（无可见敌、近期未受伤）时才拆包
+    const safe = !a.target && G.now - bot.lastDamaged > 1.5;
+    if(defenders[0]===bot && d3 < 2.2 && safe){
       a.state='defuse'; bot.vel.x=0; bot.vel.z=0;
       return;
     }

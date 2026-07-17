@@ -1,5 +1,5 @@
 {
-  "name": "csgo",
+  "name": "tactical-protocol",
   "version": "1.0.0",
   "description": "Web-based Valorant-like tactical shooter",
   "type": "module",
