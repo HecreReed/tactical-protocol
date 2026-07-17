@@ -108,15 +108,15 @@ export const AGENTS = {
     ultCost:7, ab:{
       c:{name:'烈焰之墙',cost:200,max:1,start:1,cd:0,type:'firewall'},
       q:{name:'曲光弹',cost:250,max:2,start:1,cd:0,type:'flash'},
-      e:{name:'自燃恢复',cost:0,max:1,start:1,cd:40,type:'selfheal',free:true},
+      e:{name:'火热双手',cost:0,max:1,start:1,cd:0,type:'hotHands',free:true},
       x:{name:'涅槃',cost:0,max:1,start:0,cd:0,type:'phoenixUlt',free:true},
     }
   },
   tianqiong: {
     name:'天穹', role:'控场者', emoji:'🛰️', desc:'远程烟幕与火力支援', color:0xf5c56b,
     ultCost:8, ab:{
-      c:{name:'燃烧弹',cost:200,max:1,start:1,cd:0,type:'molly'},
-      q:{name:'兴奋剂',cost:100,max:2,start:2,cd:0,type:'stim'},
+      c:{name:'燃烧榴弹',cost:250,max:1,start:1,cd:0,type:'molly'},
+      q:{name:'兴奋信标',cost:100,max:2,start:2,cd:0,type:'stimBeacon'},
       e:{name:'空降烟幕',cost:0,max:2,start:2,cd:20,type:'smokeSky',free:true},
       x:{name:'轨道打击',cost:0,max:1,start:0,cd:0,type:'orbital',free:true},
     }
@@ -124,18 +124,18 @@ export const AGENTS = {
   anmu: {
     name:'暗幕', role:'控场者', emoji:'👁️', desc:'穿墙致盲与暗影传送', color:0x8a6fd8,
     ultCost:7, ab:{
-      c:{name:'迷影烟',cost:150,max:2,start:1,cd:0,type:'smokeSky'},
+      c:{name:'暗影潜行',cost:100,max:1,start:1,cd:0,type:'shadowStep'},
       q:{name:'弥影闪',cost:250,max:1,start:1,cd:0,type:'paranoia'},
-      e:{name:'暗影步',cost:0,max:1,start:1,cd:30,type:'shadowStep',free:true},
-      x:{name:'暗影突袭',cost:0,max:1,start:0,cd:0,type:'shadowUlt',free:true},
+      e:{name:'迷影烟幕',cost:0,max:2,start:2,cd:25,type:'smokeSky',free:true},
+      x:{name:'从影而袭',cost:0,max:1,start:0,cd:0,type:'shadowUlt',free:true},
     }
   },
   lieying: {
     name:'猎鹰', role:'先锋', emoji:'🦅', desc:'情报侦查与穿墙猎杀', color:0x69c77e,
     ultCost:8, ab:{
-      c:{name:'侦查箭',cost:250,max:1,start:1,cd:0,type:'recon'},
-      q:{name:'电击箭',cost:150,max:2,start:1,cd:0,type:'shock'},
-      e:{name:'鹰眼脉冲',cost:0,max:1,start:1,cd:35,type:'pulse',free:true},
+      c:{name:'猫头鹰侦察机',cost:300,max:1,start:1,cd:0,type:'droneScan'},
+      q:{name:'震爆箭',cost:150,max:2,start:1,cd:0,type:'shock'},
+      e:{name:'侦察之箭',cost:0,max:1,start:1,cd:35,type:'recon',free:true},
       x:{name:'猎杀之矢',cost:0,max:1,start:0,cd:0,type:'hunterUlt',free:true},
     }
   },
@@ -151,19 +151,19 @@ export const AGENTS = {
   leiyi: {
     name:'雷奕', role:'决斗者', emoji:'💥', desc:'爆破狂人·炸药开路强攻', color:0xff9a3d,
     ultCost:8, ab:{
-      c:{name:'爆破雷',cost:200,max:2,start:1,cd:0,type:'nade'},
-      q:{name:'轰爆弹',cost:300,max:1,start:1,cd:0,type:'bignade'},
-      e:{name:'爆炸跳跃',cost:0,max:1,start:1,cd:25,type:'blastjump',free:true},
+      c:{name:'轰轰机器人',cost:300,max:1,start:1,cd:0,type:'boomBot'},
+      q:{name:'爆破背包',cost:200,max:2,start:1,cd:0,type:'blastjump'},
+      e:{name:'彩弹集束雷',cost:0,max:1,start:1,cd:0,type:'bignade',free:true},
       x:{name:'毁灭者火箭',cost:0,max:1,start:0,cd:0,type:'rocketUlt',free:true},
     }
   },
   zhuying: {
-    name:'蛛影', role:'哨卫', emoji:'🕷️', desc:'谍网大师·绊网哨炮锁区', color:0xbfcbd8,
+    name:'蛛影', role:'哨卫', emoji:'🕷️', desc:'装置大师·蜂群警报炮塔封区', color:0xbfcbd8,
     ultCost:8, ab:{
-      c:{name:'绊网',cost:150,max:2,start:1,cd:0,type:'tripwire'},
-      q:{name:'哨戒炮',cost:400,max:1,start:1,cd:0,type:'turret'},
-      e:{name:'禁锢烟笼',cost:0,max:1,start:1,cd:30,type:'cage',free:true},
-      x:{name:'全域窃视',cost:0,max:1,start:0,cd:0,type:'revealAll',free:true},
+      c:{name:'纳米蜂群',cost:200,max:2,start:1,cd:0,type:'nanoSwarm'},
+      q:{name:'警报机器人',cost:200,max:1,start:1,cd:0,type:'alarmBot'},
+      e:{name:'哨戒炮塔',cost:0,max:1,start:1,cd:0,type:'turret',free:true},
+      x:{name:'全域封锁',cost:0,max:1,start:0,cd:0,type:'lockdown',free:true},
     }
   },
   lanqie: {
@@ -178,8 +178,8 @@ export const AGENTS = {
   qingzhen: {
     name:'青鸩', role:'控场者', emoji:'🐍', desc:'毒术师·毒幕毒池切割战场', color:0x59d97f,
     ultCost:8, ab:{
-      c:{name:'剧毒烟云',cost:200,max:2,start:1,cd:0,type:'toxicSmoke'},
-      q:{name:'蚀骨毒池',cost:200,max:1,start:1,cd:0,type:'acidPool'},
+      c:{name:'蛇噬毒液',cost:200,max:2,start:1,cd:0,type:'acidPool'},
+      q:{name:'剧毒云雾',cost:200,max:1,start:1,cd:0,type:'toxicSmoke'},
       e:{name:'蔓延毒幕',cost:0,max:1,start:1,cd:32,type:'toxicWall',free:true},
       x:{name:'万毒领域',cost:0,max:1,start:0,cd:0,type:'toxicDome',free:true},
     }
@@ -187,9 +187,9 @@ export const AGENTS = {
   lingshi: {
     name:'零式', role:'先锋', emoji:'🤖', desc:'战术机体·压制脉冲禁技', color:0x9fb4ff,
     ultCost:7, ab:{
-      c:{name:'压制脉冲雷',cost:250,max:1,start:1,cd:0,type:'suppressNade'},
-      q:{name:'破片雷',cost:200,max:2,start:1,cd:0,type:'fragNade'},
-      e:{name:'电光闪雷',cost:0,max:1,start:1,cd:30,type:'flash',free:true},
+      c:{name:'破片雷',cost:200,max:1,start:1,cd:0,type:'fragNade'},
+      q:{name:'电光闪雷',cost:250,max:2,start:1,cd:0,type:'flash'},
+      e:{name:'零点压制刃',cost:0,max:1,start:1,cd:0,type:'suppressNade',free:true},
       x:{name:'湮灭脉冲',cost:0,max:1,start:0,cd:0,type:'nullPulse',free:true},
     }
   },

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=17';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=17';
-import { AGENTS } from './config.js?v=17';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=17';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=17';
-import { inAnyOpen } from './map.js?v=17';
-import { sfx } from './audio.js?v=17';
-import { raySphere } from './utils.js?v=17';
+import { G } from './state.js?v=18';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=18';
+import { AGENTS } from './config.js?v=18';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=18';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=18';
+import { inAnyOpen } from './map.js?v=18';
+import { sfx } from './audio.js?v=18';
+import { raySphere } from './utils.js?v=18';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -206,6 +206,7 @@ export function updateDeployables(dt){
       if(t.hp <= 0) explosionFX(t.pos);
       removeMesh(t.mesh); G.turrets.splice(i,1); continue;
     }
+    if(t.lamp) t.lamp.scale.setScalar(.9 + Math.sin(G.now*6 + 1)*.45);
     if(ph!=='live' && ph!=='planted') continue;
     const te = V3(t.pos.x, t.pos.y+.75, t.pos.z);
     let best=null, bd=26;
@@ -226,24 +227,67 @@ export function updateDeployables(dt){
       }
     }
   }
-  // 绊网
+  // 部署装置（纳米蜂群/警报机器人/兴奋信标/全域封锁/绊网）
+  const pulse = .55 + Math.sin(G.now*6)*.45;
   for(let i=G.traps.length-1;i>=0;i--){
     const tr = G.traps[i];
     if(G.now > tr.until){ removeMesh(tr.mesh); G.traps.splice(i,1); continue; }
+    // 醒目度：警灯闪烁 + 增益/充能环动画
+    if(tr.lamp){
+      tr.lamp.scale.setScalar(.8 + pulse*.5);
+      if(tr.lamp.material) tr.lamp.material.opacity = 1;
+    }
+    if(tr.ring){
+      const t = (G.now*.9) % 1;
+      tr.ring.scale.setScalar(.4 + t*(tr.type==='lockdown'?3.2:1.6));
+      tr.ring.material.opacity = .6*(1-t);
+    }
     if(ph!=='live' && ph!=='planted') continue;
+
+    if(tr.type==='beacon'){
+      // 兴奋信标：范围内友军持续获得射速/移速增益
+      for(const e of G.ents){
+        if(!e.alive || e.team !== tr.team) continue;
+        if(dist2d(e.pos, tr.pos) < tr.r) e.stimUntil = Math.max(e.stimUntil||0, G.now + .6);
+      }
+      continue;
+    }
+    if(tr.type==='lockdown'){
+      // 全域封锁：充能完毕后大范围禁锢敌人
+      if(tr.armAt && G.now >= tr.armAt){
+        sfx.beamFire(G.player ? tr.pos.distanceTo(G.player.pos) : 0);
+        for(const e of G.ents){
+          if(!e.alive || e.team === tr.team) continue;
+          if(dist2d(e.pos, tr.pos) < tr.r){
+            e.slowUntil = Math.max(e.slowUntil||0, G.now + 7);
+            e.suppressedUntil = Math.max(e.suppressedUntil||0, G.now + 7);
+            e.revealedUntil = Math.max(e.revealedUntil||0, G.now + 4);
+            if(e.isPlayer) G.hooks.hudMsg?.('你被全域封锁禁锢了！');
+          }
+        }
+        removeMesh(tr.mesh); G.traps.splice(i,1);
+      }
+      continue;
+    }
+    // 触发式装置：nano（蜂群爆发）/ alarm（警报震慑）/ wire（旧绊网）
     for(const e of G.ents){
       if(!e.alive || e.team === tr.team) continue;
-      if(dist2d(e.pos, tr.pos) < 2.1 && Math.abs(e.pos.y - tr.pos.y) < 1.6){
-        e.slowUntil = Math.max(e.slowUntil||0, G.now + 2.6);
-        e.dazeUntil = Math.max(e.dazeUntil||0, G.now + 1.6);
-        e.revealedUntil = Math.max(e.revealedUntil||0, G.now + 3);
-        if(e.isPlayer) G.hooks.dazed?.(1.2);
-        // 通知拥有者队伍
+      const trigR = tr.type==='nano' ? 3 : tr.type==='alarm' ? 3.6 : 2.1;
+      if(dist2d(e.pos, tr.pos) < trigR && Math.abs(e.pos.y - tr.pos.y) < 1.8){
+        if(tr.type==='nano'){
+          spawnZone('molly', V3(tr.pos.x,0,tr.pos.z), 3, 4, 40, tr.owner);
+          sfx.molly(G.player ? tr.pos.distanceTo(G.player.pos) : 0);
+        } else {
+          e.dazeUntil = Math.max(e.dazeUntil||0, G.now + 2.2);
+          e.slowUntil = Math.max(e.slowUntil||0, G.now + 2.6);
+          e.revealedUntil = Math.max(e.revealedUntil||0, G.now + 4);
+          if(e.isPlayer) G.hooks.dazed?.(1.4);
+          sfx.revealed();
+        }
         for(const b of G.ents){
           if(b.team!==tr.team || !b.alive || b.isPlayer || !b.ai) continue;
           if(dist2d(b.pos, tr.pos) < 40){ b.ai.lastSeenPos.copy(e.pos); b.ai.lastSeenAt = G.now; }
         }
-        sfx.revealed();
         removeMesh(tr.mesh); G.traps.splice(i,1);
         break;
       }
@@ -291,11 +335,12 @@ export function useAbility(ent, key){
 export const THROW_PARAMS = {
   smokeProj:[15,3], flash:[19,3], molly:[17,4], slowProj:[15,3.5], shock:[20,3], recon:[24,2],
   nade:[17,3.5], bignade:[16,4], fragNade:[17,3.5], acidPool:[15,3], suppressNade:[16,3],
+  hotHands:[15,3.5], nanoSwarm:[15,3],
 };
 
 // ===== 装备式施法（复刻无畏契约：按技能键持在手上，左键释放/右键低抛或取消） =====
-const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade']);
-const EQUIP_AIM = new Set(['wall','firewall','quake','paranoia','wallFlash','stunWave','shadowStep','tripwire','turret','cage','toxicSmoke','toxicWall']);
+const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade','hotHands','nanoSwarm','droneScan','boomBot']);
+const EQUIP_AIM = new Set(['wall','firewall','quake','paranoia','wallFlash','stunWave','shadowStep','tripwire','turret','cage','toxicSmoke','toxicWall','alarmBot','stimBeacon']);
 
 export function startCast(ent, key){
   if(G.castMode){
@@ -349,6 +394,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       const d = mv.lengthSq() > 4 ? mv.normalize() : dir;
       ent.vel.x = d.x*16; ent.vel.z = d.z*16;
       ent.dashUntil = G.now + .28;
+      if(key==='e') ent.abCd.e = G.now + (def.cd||22);
       sfx.dash();
       break;
     }
@@ -460,10 +506,16 @@ export function performAbility(ent, key, slot, def, opts={}){
       ent.abCd.e = G.now + def.cd;
       break;
     case 'shadowUlt':
+      if(ent.isPlayer){
+        // 从影而袭（原版幽影大招）：打开战术地图点击传送
+        G.hooks.openSmokeMap?.(ent, key, 'tp');
+        used = false;
+        break;
+      }
       if(!shadowStep(ent, 40, true)){ used=false; if(ent.isPlayer) sfx.deny(); break; }
       break;
     case 'recon':
-      throwProj(ent, 'recon', opts.alt?9:24, opts.alt?2:2); sfx.ability(); break;
+      throwProj(ent, 'recon', opts.alt?9:24, opts.alt?2:2); if(key==='e') ent.abCd.e = G.now + (def.cd||35); sfx.ability(); break;
     case 'shock':
       throwProj(ent, 'shock', opts.alt?8:20, opts.alt?2.2:3); sfx.ability(); break;
     case 'pulse':
@@ -586,12 +638,53 @@ export function performAbility(ent, key, slot, def, opts={}){
     // ---- 零式 ----
     case 'suppressNade':
       throwProj(ent, 'suppress', opts.alt?7:16, opts.alt?2.2:3); sfx.ability(); break;
+    case 'nanoSwarm':
+      throwProj(ent, 'nanoproj', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
     case 'fragNade':
       throwProj(ent, 'frag', opts.alt?7:17, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'nullPulse': {
       popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
       ent.stimUntil = G.now + 8;
       sfx.ultReady();
+      break;
+    }
+    // ---- 复刻原版新技能 ----
+    case 'hotHands':
+      throwProj(ent, 'hot', opts.alt?7:15, opts.alt?2.2:3.5); sfx.ability(); break;
+    case 'stimBeacon': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      const p = V3(ent.pos.x + dir.x*1.2, ent.pos.y, ent.pos.z + dir.z*1.2);
+      spawnDevice('beacon', p, ent, { until: G.now + 10, r: 5.5 });
+      sfx.ability();
+      break;
+    }
+    case 'droneScan': {
+      const dir = dirFromYawPitch(ent.yaw, ent.pitch*.3);
+      const o = eyePos(ent);
+      G.projectiles.push({ type:'drone', owner:ent, pos:o.clone().addScaledVector(dir,.8),
+        vel: dir.clone().multiplyScalar(8), born:G.now, nextPing:G.now+.3 });
+      sfx.reveal();
+      break;
+    }
+    case 'boomBot': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      G.projectiles.push({ type:'boombot', owner:ent,
+        pos:V3(ent.pos.x + dir.x*.8, .32, ent.pos.z + dir.z*.8),
+        vel: dir.clone().multiplyScalar(6.5), born:G.now });
+      sfx.ability();
+      break;
+    }
+    case 'alarmBot': {
+      const p = aimPoint(ent, 8);
+      spawnDevice('alarm', V3(p.x, ent.pos.y, p.z), ent, { until: G.now + 90, r: 3.6 });
+      sfx.ability();
+      break;
+    }
+    case 'lockdown': {
+      const p = V3(ent.pos.x, ent.pos.y, ent.pos.z);
+      spawnDevice('lockdown', p, ent, { until: G.now + 20, armAt: G.now + 4, r: 24 });
+      G.hooks.hudMsg?.(ent.isPlayer ? '全域封锁启动：4 秒后大范围禁锢' : null);
+      sfx.beamCharge(G.player ? p.distanceTo(G.player.pos) : 0);
       break;
     }
   }
@@ -683,7 +776,19 @@ export function botCast(bot, key, point, target){
     case 'stim': bot.stimUntil = G.now + 12; break;
     case 'dash': case 'updraft': case 'shadowStep': case 'phoenixUlt': case 'knifeUlt': case 'rez': case 'firewall':
     case 'blastjump': case 'revealAll': case 'nullPulse': case 'bigStun': case 'stunWave': case 'turret':
+    case 'stimBeacon': case 'droneScan': case 'boomBot': case 'lockdown':
       return useAbility(bot, key);
+    case 'hotHands': {
+      const p = V3(point.x, 0, point.z);
+      const z = spawnZone('molly', p, 3.6, 8, 26, bot);
+      z.healOwner = true;
+      sfx.molly(G.player ? p.distanceTo(G.player.pos) : 0);
+      break;
+    }
+    case 'nanoSwarm':
+      spawnDevice('nano', V3(point.x, 0, point.z), bot, { until: G.now + 90, r: 3 }); break;
+    case 'alarmBot':
+      spawnDevice('alarm', V3(point.x, 0, point.z), bot, { until: G.now + 90, r: 3.6 }); break;
     case 'nade': case 'bignade': case 'fragNade': {
       const p = V3(point.x, 0, point.z);
       targetRing(p, 3, 700, 0xffa040, bot);
@@ -768,7 +873,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=17').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=18').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -814,7 +919,28 @@ export function updateProjectiles(dt){
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
     if(!p.mesh) attachProjectileVisual(p);
-    p.vel.y -= (p.type==='rocket' ? 2.5 : 14)*dt;
+    if(p.type==='drone'){
+      // 侦察机：无重力直线巡航，周期性扫描显形
+      if(G.now >= p.nextPing){
+        p.nextPing = G.now + .45;
+        revealArea(p.pos.clone().setY(0), 9, 1.4, p.owner.team);
+      }
+      if(G.now - p.born > 3.6){ removeProjectileVisual(p); G.projectiles.splice(i,1); continue; }
+    } else if(p.type==='boombot'){
+      // 轰轰机器人：贴地滚进，靠近敌人自爆
+      p.pos.y = .32; p.vel.y = 0;
+      let boom = G.now - p.born > 5;
+      for(const e of G.ents){
+        if(!e.alive || e.team===p.owner.team) continue;
+        if(dist2d(e.pos, p.pos) < 2.4 && Math.abs(e.pos.y - p.pos.y) < 2){ boom = true; break; }
+      }
+      if(boom){
+        boomAt(p.pos.clone(), 3.4, 70, 30, p.owner, '轰轰机器人');
+        removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
+      }
+    } else {
+      p.vel.y -= (p.type==='rocket' ? 2.5 : 14)*dt;
+    }
     const step = p.vel.length()*dt;
     const dir = p.vel.clone().normalize();
     const wallD = rayWalls(p.pos, dir, step + .2);
@@ -864,6 +990,18 @@ export function updateProjectiles(dt){
           sfx.molly(G.player ? p.pos.distanceTo(G.player.pos) : 0);
           break;
         case 'suppress': popSuppress(p.pos.clone().setY(Math.max(.8,p.pos.y)), 5.5, 5, p.owner); break;
+        case 'hot': {
+          const z = spawnZone('molly', p.pos.clone().setY(0), 3.6, 8, 26, p.owner);
+          z.healOwner = true;
+          sfx.molly(G.player ? p.pos.distanceTo(G.player.pos) : 0);
+          break;
+        }
+        case 'nanoproj': {
+          spawnDevice('nano', p.pos.clone().setY(0), p.owner, { until: G.now + 90, r: 3 });
+          break;
+        }
+        case 'drone': break;
+        case 'boombot': boomAt(p.pos.clone(), 3.4, 70, 30, p.owner, '轰轰机器人'); break;
       }
       removeProjectileVisual(p);
       G.projectiles.splice(i,1);
@@ -888,7 +1026,11 @@ export function tickHealAndZones(dt){
       if(dx*dx + dz*dz > z.r*z.r || e.pos.y > 3) continue;
       if(z.type==='slow') slowed = true;
       else if(z.dps > 0){
-        if(z.owner && z.owner.team === e.team && z.owner !== e) continue;
+        if(z.owner && z.owner.team === e.team){
+          // 火热双手：烈焰站在自己的火圈里持续回血
+          if(z.healOwner && z.owner === e) e.hp = Math.min(100, e.hp + 13*dt);
+          continue;
+        }
         e._zoneDmg = (e._zoneDmg||0) + z.dps*dt;
         if(e._zoneDmg >= 5){
           const d = Math.floor(e._zoneDmg);

@@ -1,10 +1,10 @@
-import { G } from './state.js?v=17';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=17';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=17';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=17';
-import { useAbility, botCast } from './abilities.js?v=17';
-import { removeDrop } from './effects.js?v=17';
-import { sfx } from './audio.js?v=17';
+import { G } from './state.js?v=18';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=18';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=18';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=18';
+import { useAbility, botCast } from './abilities.js?v=18';
+import { removeDrop } from './effects.js?v=18';
+import { sfx } from './audio.js?v=18';
 
 const THINK_DT = .12;
 
@@ -454,12 +454,18 @@ function botAbilities(bot){
         bot.yaw = yawTo(bot.pos, t.pos);
         useAbility(bot,'c');
       }
-      if(bot.hp<60 && !inCombat && safeTime && bot.ab.e.n>0 && tryGate(a,'e',6)) useAbility(bot,'e');
+      if(bot.hp<60 && !inCombat && safeTime && bot.ab.e.n>0 && tryGate(a,'e',6)){
+        botCast(bot,'e', V3(bot.pos.x, 0, bot.pos.z));   // 火热双手丢脚下回血
+      }
       if(bot.hp<35 && inCombat && bot.ult>=7 && tryGate(a,'x',10)) useAbility(bot,'x');
       break;
     }
     case 'tianqiong': {
-      if(inCombat && G.now>bot.stimUntil && bot.ab.q.n>0 && tryGate(a,'q',12)) useAbility(bot,'q');
+      if(bot.ab.q.n>0 && tryGate(a,'q',14)){
+        const pushingNow = side==='atk' && executing;
+        const holdingSpike = side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<14;
+        if(pushingNow || holdingSpike || (inCombat && G.now>bot.stimUntil)) useAbility(bot,'q');
+      }
       if(side==='atk' && (executing || (pushing(a) && a.goal && dist2d(bot.pos,a.goal)<28)) && bot.ab.e.n>0 && !a.flags.execSmoke && tryGate(a,'e',4)){
         a.flags.execSmoke = true;
         const pts = (G.map.smokePoints[m.plan.site]||[]).slice(0, Math.max(1,bot.ab.e.n));
@@ -479,15 +485,20 @@ function botAbilities(bot){
       break;
     }
     case 'anmu': {
-      if(side==='atk' && (executing || (pushing(a) && a.goal && dist2d(bot.pos,a.goal)<28)) && bot.ab.c.n>0 && !a.flags.execSmoke && tryGate(a,'c',4)){
+      if(side==='atk' && (executing || (pushing(a) && a.goal && dist2d(bot.pos,a.goal)<28)) && bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.execSmoke && tryGate(a,'e',4)){
         a.flags.execSmoke = true;
         const pts = (G.map.smokePoints[m.plan.site]||[]).slice(0,1);
-        for(const pt of pts) botCast(bot,'c', V3(pt[0],0,pt[1]));
+        for(const pt of pts) botCast(bot,'e', V3(pt[0],0,pt[1]));
       }
-      if(side==='def' && !a.flags.defOpenSmoke && a.hold && G.now - m.liveStart > 2 && G.now - m.liveStart < 10 && bot.ab.c.n>0){
+      if(side==='def' && !a.flags.defOpenSmoke && a.hold && G.now - m.liveStart > 2 && G.now - m.liveStart < 10 && bot.ab.e.n>0 && G.now>bot.abCd.e){
         a.flags.defOpenSmoke = true;
         const ch = nearestChokeTo(a.hold);
-        if(ch) botCast(bot,'c', ch);
+        if(ch) botCast(bot,'e', ch);
+      }
+      if(hurt && inCombat && bot.ab.c.n>0 && tryGate(a,'c',8)){
+        bot.yaw += Math.PI;
+        useAbility(bot,'c');
+        bot.yaw -= Math.PI;
       }
       if(side==='atk' && executing && a.goal && dist2d(bot.pos,a.goal)<18 && bot.ab.q.n>0 && !a.flags.para && tryGate(a,'q',6)){
         a.flags.para = true;
@@ -495,23 +506,22 @@ function botAbilities(bot){
       }
       if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<16 && bot.ab.q.n>0 && tryGate(a,'q',10))
         botCast(bot,'q', sp.pos);
-      if(hurt && inCombat && bot.ab.e.n>0 && tryGate(a,'e',8)){
-        bot.yaw += Math.PI;
-        useAbility(bot,'e');
-        bot.yaw -= Math.PI;
-      }
       break;
     }
     case 'lieying': {
-      if(side==='atk' && pushing(a) && !a.flags.recon && bot.ab.c.n>0 && tryGate(a,'c',5)){
+      if(bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.recon && pushing(a) && tryGate(a,'e',5)){
         a.flags.recon = true;
         const site = G.map.sites[m.plan.site];
-        botCast(bot,'c', V3(site.plant[0],0,site.plant[1]));
+        botCast(bot,'e', V3(site.plant[0],0,site.plant[1]));
       }
-      if(bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',6)){
-        const nearGoal = a.goal && dist2d(bot.pos,a.goal)<12;
-        const retaking = side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<20;
-        if(nearGoal || retaking) useAbility(bot,'e');
+      if(bot.ab.c.n>0 && tryGate(a,'c',8)){
+        const nearGoal = a.state==='execute' && a.goal && dist2d(bot.pos,a.goal)<20;
+        const retaking = side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<24;
+        if(nearGoal || retaking){
+          const dest = nearGoal ? a.goal : sp.pos;
+          bot.yaw = yawTo(bot.pos, dest);
+          useAbility(bot,'c');   // 放出侦察机
+        }
       }
       if(enemyChanneling && bot.ab.q.n>0 && tryGate(a,'q',6)) botCast(bot,'q', enemyChanneling.pos);
       if(bot.ult>=8){
@@ -538,32 +548,37 @@ function botAbilities(bot){
       break;
     }
     case 'leiyi': {
-      if(side==='atk' && executing && a.goal && bot.ab.q.n>0 && !a.flags.execNade && tryGate(a,'q',4)){
+      if(side==='atk' && executing && a.goal && bot.ab.e.n>0 && !a.flags.execNade && tryGate(a,'e',4)){
         a.flags.execNade = true;
-        botCast(bot,'q', a.goal);
+        botCast(bot,'e', a.goal);
       }
-      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.c.n>0 && tryGate(a,'c',7))
-        botCast(bot,'c', a.lastSeenPos);
-      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.c.n>0 && tryGate(a,'c',7)){
+        bot.yaw = yawTo(bot.pos, a.lastSeenPos);
+        useAbility(bot,'c');   // 放出轰轰机器人追击
+      }
+      if(enemyChanneling && bot.ab.e.n>0 && tryGate(a,'e',6)) botCast(bot,'e', enemyChanneling.pos);
       if(bot.ult>=8 && inCombat && dist2d(bot.pos,t.pos)>8 && dist2d(bot.pos,t.pos)<30 && tryGate(a,'x',10))
         botCast(bot,'x', eyePos(t), t);
       break;
     }
     case 'zhuying': {
-      // 到达驻点后布防：哨戒炮 + 绊网
+      // 到达驻点后布防：哨戒炮塔 + 纳米蜂群 + 警报机器人
       const settled = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
-      if(settled && bot.ab.q.n>0 && !a.flags.turret && tryGate(a,'q',3)){
+      if(settled && bot.ab.e.n>0 && !a.flags.turret && tryGate(a,'e',3)){
         a.flags.turret = true;
-        useAbility(bot,'q');
+        useAbility(bot,'e');
       }
-      if(settled && bot.ab.c.n>0 && !a.flags.wire && tryGate(a,'c',3)){
-        a.flags.wire = true;
+      if(settled && bot.ab.c.n>0 && !a.flags.nano && tryGate(a,'c',3)){
+        a.flags.nano = true;
         const ch = nearestChokeTo(bot.pos);
         botCast(bot,'c', ch || V3(bot.pos.x+rand(-3,3),0,bot.pos.z+rand(-3,3)));
       }
-      if(sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8))
-        botCast(bot,'e', sp.pos);
-      if(bot.ult>=8 && (sp.state==='planted' || (side==='atk'&&executing)) && tryGate(a,'x',10))
+      if(settled && bot.ab.q.n>0 && !a.flags.alarm && tryGate(a,'q',3)){
+        a.flags.alarm = true;
+        const ch = nearestChokeTo(bot.pos);
+        botCast(bot,'q', ch ? V3(ch.x+rand(-2,2),0,ch.z+rand(-2,2)) : V3(bot.pos.x+rand(-4,4),0,bot.pos.z+rand(-4,4)));
+      }
+      if(bot.ult>=8 && sp.state==='planted' && dist2d(bot.pos,sp.pos)<22 && tryGate(a,'x',10))
         useAbility(bot,'x');
       break;
     }
@@ -590,25 +605,25 @@ function botAbilities(bot){
         a.flags.wall = true;
         botCast(bot,'e', a.goal || V3(bot.pos.x,0,bot.pos.z-10));
       }
-      if(side==='def' && !a.flags.defOpenSmoke && a.hold && G.now - m.liveStart > 2 && G.now - m.liveStart < 10 && bot.ab.c.n>0){
+      if(side==='def' && !a.flags.defOpenSmoke && a.hold && G.now - m.liveStart > 2 && G.now - m.liveStart < 10 && bot.ab.q.n>0){
         a.flags.defOpenSmoke = true;
         const ch = nearestChokeTo(a.hold);
-        if(ch) botCast(bot,'c', ch);
+        if(ch) botCast(bot,'q', ch);
       }
-      if(enemyChanneling && bot.ab.q.n>0 && tryGate(a,'q',6)) botCast(bot,'q', enemyChanneling.pos);
+      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
       if(bot.ult>=8 && sp.state==='planted' && tryGate(a,'x',10)) botCast(bot,'x', sp.pos);
       break;
     }
     case 'lingshi': {
-      if(side==='atk' && executing && a.goal && bot.ab.c.n>0 && !a.flags.suppress && tryGate(a,'c',4)){
+      if(side==='atk' && executing && a.goal && bot.ab.e.n>0 && !a.flags.suppress && tryGate(a,'e',4)){
         a.flags.suppress = true;
-        botCast(bot,'c', a.goal);
+        botCast(bot,'e', a.goal);
       }
-      if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.c.n>0 && tryGate(a,'c',8))
-        botCast(bot,'c', sp.pos);
-      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8))
-        botCast(bot,'e', a.lastSeenPos);
-      if(enemyChanneling && bot.ab.q.n>0 && tryGate(a,'q',6)) botCast(bot,'q', enemyChanneling.pos);
+      if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.e.n>0 && tryGate(a,'e',8))
+        botCast(bot,'e', sp.pos);
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.q.n>0 && tryGate(a,'q',8))
+        botCast(bot,'q', a.lastSeenPos);
+      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
       if(bot.ult>=7 && tryGate(a,'x',6)){
         const near = G.ents.filter(e=>e.alive && e.team!==bot.team && dist2d(e.pos,bot.pos)<15).length;
         if(near >= 2) useAbility(bot,'x');

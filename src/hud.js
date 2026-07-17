@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=17';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=17';
-import { MAPS, inAnyOpen } from './map.js?v=17';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=17';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=17';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=17';
-import { buyAbility, sellAbility } from './abilities.js?v=17';
-import { spawnSmoke, targetRing } from './effects.js?v=17';
-import { abilityIcon } from './icons.js?v=17';
-import { sfx, setVolume } from './audio.js?v=17';
+import { G, saveSettings } from './state.js?v=18';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=18';
+import { MAPS, inAnyOpen, snapToNav } from './map.js?v=18';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=18';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=18';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=18';
+import { buyAbility, sellAbility } from './abilities.js?v=18';
+import { spawnSmoke, targetRing } from './effects.js?v=18';
+import { abilityIcon } from './icons.js?v=18';
+import { sfx, setVolume } from './audio.js?v=18';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -101,9 +101,10 @@ function playerDazed(dur){
 
 // ---------- 天穹战术地图下烟（原版炼狱式） ----------
 const sMap = { open:false, ent:null, key:null, placed:0 };
-function openSmokeMap(ent, key){
+function openSmokeMap(ent, key, mode='smoke'){
   if(sMap.open) return;
-  sMap.open = true; sMap.ent = ent; sMap.key = key; sMap.placed = 0;
+  sMap.open = true; sMap.ent = ent; sMap.key = key; sMap.placed = 0; sMap.mode = mode;
+  els.smokeMap.querySelector('h2').textContent = mode==='tp' ? '🌑 从影而袭 — 点击地图传送' : '🛰️ 空降烟幕 — 战术地图';
   els.smokeMap.classList.remove('hidden');
   G.menuOpen = true;
   document.exitPointerLock?.();
@@ -155,8 +156,12 @@ function drawSmokeMap(){
     g.beginPath(); g.moveTo(0,-9); g.lineTo(6,7); g.lineTo(-6,7); g.closePath(); g.fill();
     g.restore();
   }
-  const n = p ? p.ab[sMap.key].n : 0;
-  els.smokeMapInfo.textContent = `剩余烟幕 ×${n} · 左键点击地图投放 · E / 右键 / Esc 收起`;
+  if(sMap.mode==='tp'){
+    els.smokeMapInfo.textContent = '点击地图任意位置传送 · X / 右键 / Esc 取消';
+  } else {
+    const n = p ? p.ab[sMap.key].n : 0;
+    els.smokeMapInfo.textContent = `剩余烟幕 ×${n} · 左键点击地图投放 · E / 右键 / Esc 收起`;
+  }
 }
 function smokeMapClick(e){
   if(!sMap.open) return;
@@ -164,12 +169,26 @@ function smokeMapClick(e){
   const ph = G.match?.phase;
   if(!ent?.alive || (ph!=='live' && ph!=='planted')){ closeSmokeMap(false); return; }
   const slot = ent.ab[sMap.key];
-  if(slot.n <= 0){ closeSmokeMap(); return; }
+  if(sMap.mode!=='tp' && slot.n <= 0){ closeSmokeMap(); return; }
   const rect = els.smokeMapCanvas.getBoundingClientRect();
   const k = 460/110, off = 55;
   const wx = (e.clientX - rect.left) * (460/rect.width) / k - off;
   const wz = (e.clientY - rect.top) * (460/rect.height) / k - off;
   if(!inAnyOpen(wx, wz)){ sfx.deny(); return; }
+  if(sMap.mode==='tp'){
+    // 从影而袭：地图传送
+    const from = ent.pos.clone();
+    const dest = snapToNav(V3(wx, 0, wz));
+    ent.pos.set(dest.x, dest.y, dest.z);
+    ent.vel.set(0,0,0);
+    ent.ult = 0;
+    targetRing(V3(from.x,0,from.z), 1.6, 900, 0x8a6fd8);
+    targetRing(V3(dest.x,0,dest.z), 1.6, 900, 0x8a6fd8);
+    sfx.teleport(0);
+    G.hooks.hudMsg?.('暗影降临！');
+    closeSmokeMap();
+    return;
+  }
   slot.n--;
   sMap.placed++;
   const pt = V3(wx, 0, wz);

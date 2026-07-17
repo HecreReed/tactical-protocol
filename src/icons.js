@@ -49,6 +49,14 @@ const P = {
   acidPool:   '<path d="M12 3.5c1.8 2.6 4.2 5.2 4.2 8a4.2 4.2 0 0 1-8.4 0c0-2.8 2.4-5.4 4.2-8z"/><path d="M4 20.5c2.6-1.6 5.2 1.4 8 0s5.4 1.4 8 0" opacity=".7"/>',
   toxicWall:  '<rect x="3.2" y="7.5" width="4.6" height="13" rx="2.3"/><rect x="9.7" y="4" width="4.6" height="16.5" rx="2.3"/><rect x="16.2" y="7.5" width="4.6" height="13" rx="2.3"/>',
   toxicDome:  '<path d="M4 17.5a8 8 0 0 1 16 0"/><path d="M2.8 17.5h18.4"/><path d="M8 17.5v2.6M12 17.5v3.6M16 17.5v2.6" opacity=".6"/>',
+  // 复刻原版新增
+  hotHands:   '<path d="M12 3.5c.9 2.7 4.5 4.6 4.5 8.2a4.5 4.5 0 0 1-9 0c0-1.8.9-3.2 2-4.6.9 1.1 2.5-1.5 2.5-3.6z"/><path d="M9.5 19.5h5M12 17v5" opacity=".8"/>',
+  stimBeacon: '<path d="M12 21v-8"/><circle cx="12" cy="9.5" r="2.4" fill="currentColor" stroke="none"/><path d="M7 14a7 7 0 0 1 0-9M17 14a7 7 0 0 0 0-9" opacity=".6"/><path d="M4.5 16.5a10.5 10.5 0 0 1 0-14M19.5 16.5a10.5 10.5 0 0 0 0-14" opacity=".3"/>',
+  droneScan:  '<rect x="8.5" y="9" width="7" height="5" rx="1.4"/><path d="M8.5 11.5H3.5M15.5 11.5h5M5.5 9.5v4M18.5 9.5v4"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><path d="M9 17.5a4.5 4.5 0 0 0 6 0" opacity=".6"/>',
+  boomBot:    '<rect x="6" y="8" width="12" height="7" rx="2"/><circle cx="9" cy="17.5" r="2"/><circle cx="15" cy="17.5" r="2"/><path d="M12 8V5.5M10.5 5.5h3" opacity=".8"/><circle cx="15" cy="11" r="1" fill="currentColor" stroke="none"/>',
+  nanoSwarm:  '<circle cx="12" cy="15" r="4.5"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.2" fill="currentColor" stroke="none"/><path d="M8 8.5L10.5 12M12 6.5V10.5M16 8.5L13.5 12" opacity=".55"/>',
+  alarmBot:   '<rect x="8" y="10" width="8" height="7" rx="1.4"/><path d="M10 17v3M14 17v3M12 10V7.5"/><circle cx="12" cy="6" r="1.6" fill="currentColor" stroke="none"/><path d="M7.5 4.5a6 6 0 0 1 9 0" opacity=".55"/>',
+  lockdown:   '<rect x="7" y="11" width="10" height="8" rx="1.5"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="15" r="9.5" opacity=".3"/>',
   // 零式
   suppressNade:'<path d="M12 3.6l8.4 8.4-8.4 8.4-8.4-8.4z" opacity=".8"/><path d="M5.2 5.2l13.6 13.6"/>',
   fragNade:   '<circle cx="12" cy="13.5" r="5.6"/><path d="M12 7.9V5.4h3.4"/><path d="M7 6.2l1.8 1.8M17.6 18.4l1.6 1.6M5 15.5H2.8" opacity=".6"/>',

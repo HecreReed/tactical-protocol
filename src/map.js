@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=17";
-import { V3, rayAABB, dist2d } from "./utils.js?v=17";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=17";
+import { G } from "./state.js?v=18";
+import { V3, rayAABB, dist2d } from "./utils.js?v=18";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=18";
 const HALF = WORLD/2;   // 55
 const OLD_MAPS = [
   {

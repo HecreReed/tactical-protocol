@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=17';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=17';
-import { SKINS, AGENTS } from './config.js?v=17';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=17';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=17';
-import { tracer, spawnSmoke } from './effects.js?v=17';
-import { sfx } from './audio.js?v=17';
+import { G, sens } from './state.js?v=18';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=18';
+import { SKINS, AGENTS } from './config.js?v=18';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=18';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=18';
+import { tracer, spawnSmoke } from './effects.js?v=18';
+import { sfx } from './audio.js?v=18';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -171,6 +171,8 @@ function updateCastRing(p, cm){
     case 'toxicSmoke': pt = ground(40); r = 3.8; break;
     case 'toxicWall':  pt = V3(p.pos.x+hx*6, 0, p.pos.z+hz*6); r = 1.4; break;
     case 'shadowStep': { const d = Math.min(rayWalls(o, dir, 9), 9)*.9; pt = o.clone().addScaledVector(dir, d); pt.y = 0; break; }
+    case 'alarmBot':   pt = ground(8); r = 1; break;
+    case 'stimBeacon': pt = V3(p.pos.x+hx*1.2, 0, p.pos.z+hz*1.2); r = 5.5; break;
     case 'paranoia': case 'wallFlash': case 'stunWave':
       pt = V3(p.pos.x+hx*6, 0, p.pos.z+hz*6); r = 1.6; break;
     default: pt = ground(25); break;
@@ -459,8 +461,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=17';
-import { raySphere } from './utils.js?v=17';
+import { hitSpheres } from './combat.js?v=18';
+import { raySphere } from './utils.js?v=18';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

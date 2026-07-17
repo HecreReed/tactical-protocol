@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=17';
-import { V3 } from './utils.js?v=17';
-import { sfx } from './audio.js?v=17';
+import { G } from './state.js?v=18';
+import { V3 } from './utils.js?v=18';
+import { sfx } from './audio.js?v=18';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -122,7 +122,7 @@ export function spawnTurret(pos, yaw, ent){
   g.add(head, barrel, eye);
   g.position.copy(pos); g.rotation.y = yaw;
   scene.add(g);
-  const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:40, nextFire:0, mesh:g, until:G.now+45 };
+  const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:40, nextFire:0, mesh:g, lamp:eye, until:G.now+45 };
   G.turrets.push(t);
   sfx.wall(G.player? pos.distanceTo(G.player.pos):0);
   return t;
@@ -212,6 +212,74 @@ export function removeDrop(d){
   scene.remove(d.mesh);
   const i = G.drops.indexOf(d);
   if(i>=0) G.drops.splice(i,1);
+}
+
+// ---- 通用部署装置（醒目可辨识：队伍色脉冲灯 + 独特轮廓） ----
+export function spawnDevice(type, pos, ent, opts={}){
+  const teamCol = ent.team==='ally' ? 0x39d0c9 : 0xff4655;
+  const g = new THREE.Group();
+  const lampMat = new THREE.MeshBasicMaterial({color:teamCol});
+  let lamp = null, ring = null;
+  if(type==='nano'){
+    // 纳米蜂群：地面圆盘 + 四颗浮动蜂群粒
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,.12,10),
+      new THREE.MeshStandardMaterial({color:0x2c3640, roughness:.6, metalness:.3}));
+    disc.position.y = .06;
+    g.add(disc);
+    for(let i=0;i<4;i++){
+      const bee = new THREE.Mesh(new THREE.SphereGeometry(.05,6,5), lampMat);
+      const a = i/4*Math.PI*2;
+      bee.position.set(Math.cos(a)*.3, .3, Math.sin(a)*.3);
+      g.add(bee);
+    }
+    lamp = new THREE.Mesh(new THREE.SphereGeometry(.08,8,6), lampMat);
+    lamp.position.y = .16;
+    g.add(lamp);
+  } else if(type==='alarm'){
+    // 警报机器人：立式小机器人 + 天线警灯
+    const body = new THREE.Mesh(new THREE.BoxGeometry(.34,.5,.3),
+      new THREE.MeshStandardMaterial({color:0x9fb0ba, roughness:.5, metalness:.35}));
+    body.position.y = .45;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(.08,.2,.12), new THREE.MeshStandardMaterial({color:0x2a333c}));
+    legL.position.set(-.12,.1,0);
+    const legR = legL.clone(); legR.position.x = .12;
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.4,5), new THREE.MeshStandardMaterial({color:0x2a333c}));
+    antenna.position.y = .9;
+    lamp = new THREE.Mesh(new THREE.SphereGeometry(.09,8,6), lampMat);
+    lamp.position.y = 1.14;
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(.22,.07,.04), new THREE.MeshBasicMaterial({color:0x101820}));
+    eye.position.set(0,.55,-.16);
+    g.add(body, legL, legR, antenna, lamp, eye);
+  } else if(type==='beacon'){
+    // 兴奋信标：立柱 + 扩散增益环
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(.09,.13,.85,8),
+      new THREE.MeshStandardMaterial({color:0xd8b45a, roughness:.4, metalness:.4}));
+    pole.position.y = .42;
+    lamp = new THREE.Mesh(new THREE.SphereGeometry(.12,8,6), new THREE.MeshBasicMaterial({color:0xffe08a}));
+    lamp.position.y = .95;
+    ring = new THREE.Mesh(new THREE.RingGeometry(.9,1.05,28),
+      new THREE.MeshBasicMaterial({color:0xffd870, transparent:true, opacity:.55, side:THREE.DoubleSide, depthWrite:false}));
+    ring.rotation.x = -Math.PI/2; ring.position.y = .1;
+    g.add(pole, lamp, ring);
+  } else if(type==='lockdown'){
+    // 全域封锁：大型装置 + 充能环
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(.55,.7,1.1,8),
+      new THREE.MeshStandardMaterial({color:0xbfcbd8, roughness:.4, metalness:.5}));
+    core.position.y = .55;
+    lamp = new THREE.Mesh(new THREE.SphereGeometry(.16,10,8), lampMat);
+    lamp.position.y = 1.25;
+    ring = new THREE.Mesh(new THREE.RingGeometry(1.3,1.55,36),
+      new THREE.MeshBasicMaterial({color:teamCol, transparent:true, opacity:.5, side:THREE.DoubleSide, depthWrite:false}));
+    ring.rotation.x = -Math.PI/2; ring.position.y = .12;
+    g.add(core, lamp, ring);
+  }
+  g.position.copy(pos);
+  scene.add(g);
+  const d = { type, pos:pos.clone(), team:ent.team, owner:ent, mesh:g, lamp, ring,
+    until: opts.until ?? (G.now+60), armAt: opts.armAt ?? 0, r: opts.r ?? 3, tick: 0 };
+  G.traps.push(d);
+  sfx.wall(G.player ? pos.distanceTo(G.player.pos) : 0);
+  return d;
 }
 
 export function suppressFX(p){

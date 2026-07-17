@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=17';
-import { buildMap } from './map.js?v=17';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=17';
-import { initAudio } from './audio.js?v=17';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=17';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=17';
-import { updateBots } from './bots.js?v=17';
-import { startMatch, updateGame } from './game.js?v=17';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=17';
+import { G } from './state.js?v=18';
+import { buildMap } from './map.js?v=18';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=18';
+import { initAudio } from './audio.js?v=18';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=18';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=18';
+import { updateBots } from './bots.js?v=18';
+import { startMatch, updateGame } from './game.js?v=18';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=18';
 
 let started = false;
 let sun = null;
