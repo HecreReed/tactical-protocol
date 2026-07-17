@@ -150,7 +150,7 @@ function spawnSets(){
     smokePoints:{A:[[31,-13],[24,-15]], B:[[-27,-15],[-22,-17]]},
     spawns:spawnSets(),
     barriers:[
-      {rect:[-38,28,38,29], side:'atk'},
+      {rect:[-39,28.5,39,30.5], side:'atk'},              // 加厚 3 格：杜绝对角线绕过
       {rect:[27,-12.6,35,-11.8], side:'def'},
       {rect:[1,-12.6,9,-11.8], side:'def'},
       {rect:[-31,-14.6,-23,-13.8], side:'def'},
@@ -256,7 +256,7 @@ function spawnSets(){
     smokePoints:{A:[[33,-10],[28,-13]], B:[[1,-16],[3,-18]], C:[[-26,-9],[-28,-12]]},
     spawns:spawnSets(),
     barriers:[
-      {rect:[-38,28,38,29], side:'atk'},
+      {rect:[-39,28,39,29.5], side:'atk'},                // 加厚防对角绕
       {rect:[29,-10.6,37,-9.8], side:'def'},
       {rect:[21.6,-14.2,22.4,-9.8], side:'def'},
       {rect:[-3,-16.6,5,-15.8], side:'def'},
@@ -359,7 +359,7 @@ function spawnSets(){
     smokePoints:{A:[[26,-14],[20,-16]], B:[[-22,-6],[-24,-10]]},
     spawns:spawnSets(),
     barriers:[
-      {rect:[-36,28,36,29], side:'atk'},
+      {rect:[-39,28.5,39,30.5], side:'atk'},                // 加厚防对角绕
       {rect:[22,-14.6,30,-13.8], side:'def'},
       {rect:[13,-14.6,19,-13.8], side:'def'},
       {rect:[-13,-11.6,4,-10.8], side:'def'},

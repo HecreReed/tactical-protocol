@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=11';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=11';
-import { SKINS } from './config.js?v=11';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage } from './combat.js?v=11';
-import { useAbility } from './abilities.js?v=11';
-import { tracer } from './effects.js?v=11';
-import { sfx } from './audio.js?v=11';
+import { G, sens } from './state.js?v=12';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=12';
+import { SKINS } from './config.js?v=12';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=12';
+import { useAbility } from './abilities.js?v=12';
+import { tracer, spawnSmoke } from './effects.js?v=12';
+import { sfx } from './audio.js?v=12';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -42,6 +42,14 @@ export function initPlayerInput(){
     const p = G.player;
     if(e.code==='Tab'){ e.preventDefault(); G.hooks.showBoard?.(true); }
     if(!p.alive) return;
+    // 下烟模式中：用左键确认，其他按键取消
+    if(G.smokeMode && G.smokeMode.agent === p && !G.mouse.lmb){
+      if(e.code==='KeyC'||e.code==='KeyQ'||e.code==='KeyE'||e.code==='KeyX'||
+         e.code==='Digit1'||e.code==='Digit2'||e.code==='Digit3'){
+        cancelSmokeMode();
+        return;
+      }
+    }
     switch(e.code){
       case 'KeyR': startReload(p); break;
       case 'Digit1': switchSlot(p,'primary'); break;
@@ -62,6 +70,12 @@ export function initPlayerInput(){
 let skinMats = { body: null, accent: null };
 function curSkin(){ return SKINS.find(s=>s.id===G.settings.skin) || SKINS[0]; }
 export function playerTracerColor(){ return curSkin().tracer; }
+
+function cancelSmokeMode(){
+  if(!G.smokeMode) return;
+  if(G.smokeMode.ring) G.scene.remove(G.smokeMode.ring);
+  G.smokeMode = null;
+}
 
 export function switchSlot(p, slot){
   if(p.knifeUlt>0) return;
@@ -248,11 +262,42 @@ export function updatePlayer(dt){
   // interact (plant/defuse)
   G.hooks.interactTick?.(p, dt);
 
+  // 下烟模式（天穹/暗幕）：瞄准指针+左键投放
+  if(G.smokeMode){
+    const sm = G.smokeMode;
+    if(G.now > sm.until){ G.smokeMode = null; }
+    else {
+      const dir = dirFromYawPitch(p.yaw, p.pitch);
+      const o = eyePos(p);
+      const maxD = 60;
+      const d = Math.min(rayWalls(o, dir, maxD), maxD);
+      const pt = o.clone().addScaledVector(dir, d); pt.y = 0;
+      if(!sm.ring){
+        sm.ring = new THREE.Mesh(new THREE.RingGeometry(4.3,4.5,32),
+          new THREE.MeshBasicMaterial({color:0x39d0c9, transparent:true, opacity:.85, side:THREE.DoubleSide, depthWrite:false}));
+        sm.ring.rotation.x = -Math.PI/2;
+        G.scene.add(sm.ring);
+      }
+      sm.ring.position.copy(pt).y += .06;
+      if(G.mouse.lmb){
+        G.mouse.lmb = false;
+        spawnSmoke(pt, 4.5, 19);
+        const ent = sm.agent;
+        if(sm.key==='e') ent.abCd.e = G.now + sm.cd;
+        ent.ab[sm.key].n--;
+        G.hooks.refreshBuy?.();
+        sfx.smokePop(pt.distanceTo(p.pos));
+        G.scene.remove(sm.ring);
+        G.smokeMode = null;
+      }
+    }
+  }
+
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=11';
-import { raySphere } from './utils.js?v=11';
+import { hitSpheres } from './combat.js?v=12';
+import { raySphere } from './utils.js?v=12';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
@@ -307,7 +352,7 @@ function updateCamera(p, dt){
   if(p.grounded && hspd>1) P.bobT += dt*hspd*1.7; 
   cam.rotation.order = 'YXZ';
   const visRecoil = deg(P.recoilPitch*.01)*.5;
-  cam.rotation.y = p.yaw + deg(P.recoilYaw*.01)*.3;
+  cam.rotation.y = p.yaw + deg(P.recoilYaw*.01)*.08; // was .3, excessive wobble
   cam.rotation.x = p.pitch + visRecoil;
   cam.rotation.z = 0;
 

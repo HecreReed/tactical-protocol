@@ -90,7 +90,7 @@ export const WEAPONS = [
     ads:{fov:58,spread:0.35,mv:0.5,recoil:0.6}, vm:{x:.18,y:-.14,z:-.47,sc:.06,rot:[0,0,.07]}, name:'Odin', alt:true },
   { id:'knife',      cat:'melee',  cost:0,  mag:-1, res:-1, fi:0.4,  rl:0,
     dmg:{0:{h:100,b:50,l:50}}, spread:{base:0,mv:0,bloom:0}, recoil:{perShot:0,cap:0,wander:0,decay:0},
-    ads:{fov:0}, vm:{x:.14,y:-.2,z:-.28,sc:.035,rot:[0.6,0,0]}, name:'刀', range:2.2, alt:false },
+    ads:{fov:0}, vm:{x:.14,y:-.2,z:-.28,sc:.035,rot:[0.6,0,0]}, name:'刀', range:2.6, alt:false },
 ];
 
 export const AGENTS = {

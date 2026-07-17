@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=11";
-import { V3, rayAABB, dist2d } from "./utils.js?v=11";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=11";
+import { G } from "./state.js?v=12";
+import { V3, rayAABB, dist2d } from "./utils.js?v=12";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=12";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",

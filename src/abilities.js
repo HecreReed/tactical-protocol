@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=11';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=11';
-import { AGENTS } from './config.js?v=11';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=11';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=11';
-import { inAnyOpen } from './map.js?v=11';
-import { sfx } from './audio.js?v=11';
-import { raySphere } from './utils.js?v=11';
+import { G } from './state.js?v=12';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=12';
+import { AGENTS } from './config.js?v=12';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=12';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=12';
+import { inAnyOpen } from './map.js?v=12';
+import { sfx } from './audio.js?v=12';
+import { raySphere } from './utils.js?v=12';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -183,11 +183,18 @@ export function useAbility(ent, key){
     case 'smokeProj':
       throwProj(ent, 'smoke', 15, 3); sfx.ability(); break;
     case 'smokeSky': {
-      const p = aimPoint(ent, 60);
-      targetRing(p, 4.5, 1200);
-      setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
-      if(key==='e') ent.abCd.e = G.now + def.cd;
-      sfx.ability();
+      // 天穹/暗幕 — 进入下烟模式（带地面瞄准指示器）
+      if(!ent.isPlayer || (ent.agent!=='tianqiong' && ent.agent!=='anmu')){
+        // bot 或非玩家：原有逻辑
+        const p = aimPoint(ent, 60);
+        targetRing(p, 4.5, 1200);
+        setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
+        if(key==='e') ent.abCd.e = G.now + def.cd;
+        sfx.ability();
+        break;
+      }
+      // 玩家下烟模式（不立即消耗，等点击确认）
+      G.smokeMode = { agent: ent, key, cd: def.cd||20, until: G.now + 12 };
       break;
     }
     case 'molly':
@@ -388,7 +395,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=11').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=12').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

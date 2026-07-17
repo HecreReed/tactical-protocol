@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=11';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=11';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=11';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=11';
-import { initAbilities, roundRefill } from './abilities.js?v=11';
-import { initBotAI, resetBotRound } from './bots.js?v=11';
-import { inSite } from './map.js?v=11';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers } from './effects.js?v=11';
-import { buildViewModel, switchSlot } from './player.js?v=11';
-import { sfx } from './audio.js?v=11';
+import { G } from './state.js?v=12';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=12';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=12';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=12';
+import { initAbilities, roundRefill } from './abilities.js?v=12';
+import { initBotAI, resetBotRound } from './bots.js?v=12';
+import { inSite } from './map.js?v=12';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers } from './effects.js?v=12';
+import { buildViewModel, switchSlot } from './player.js?v=12';
+import { sfx } from './audio.js?v=12';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];
@@ -98,11 +98,14 @@ export function startRound(){
   m.tPhase = G.now + 30;
   m.rotateCall = null;
   m.plan = { site: pick(G.map.siteKeys), t: G.now };
+  m.strategy = { pace: pick(['rush','default','slow']), coord: pick(['split','group']) };
   m.planSwitchedAt = 0;
   m.executeT = 0; m.execSite = null;
   m.contact.ally.t = -99; m.contact.enemy.t = -99;
   clearRoundFX();
   G.projectiles.length = 0;
+  if(G.smokeMode?.ring) G.scene.remove(G.smokeMode.ring);
+  G.smokeMode = null;
   addBarriers();
 
   // spike reset

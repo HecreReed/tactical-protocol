@@ -1,9 +1,9 @@
-import { G } from './state.js?v=11';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=11';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=11';
-import { findPath, inSite, nearestWp, pathClear } from './map.js?v=11';
-import { useAbility, botCast } from './abilities.js?v=11';
-import { sfx } from './audio.js?v=11';
+import { G } from './state.js?v=12';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=12';
+import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=12';
+import { findPath, inSite, nearestWp, pathClear } from './map.js?v=12';
+import { useAbility, botCast } from './abilities.js?v=12';
+import { sfx } from './audio.js?v=12';
 
 const THINK_DT = .12;
 
@@ -16,7 +16,7 @@ export function initBotAI(ent, i){
     burstLeft: 0, burstPause: 0,
     strafeDir: 1, strafeT: 0,
     repathT: 0, stuckT: 0, lastPos: V3(), sideUntil: 0, sideDir: 1, backUntil: 0, detourT: 0, giveUp: 0,
-    role: i, planStartAt: 0, stageAt: 0,
+    role: i, planStartAt: 0, stageAt: 0, assaultRole: null,
     flags: {}, abGate: 0,
     aimHead: false, rotated: false,
     state: 'wait',
@@ -594,7 +594,7 @@ function think(bot){
   else thinkDefend(bot);
 }
 
-// ---------- 进攻：集合-齐推战术 ----------
+// ---------- 进攻：策略驱动·分工协作 ----------
 function thinkAttack(bot){
   const a = bot.ai, m = G.match, sp = m.spike;
   const site = m.plan.site;
@@ -602,6 +602,16 @@ function thinkAttack(bot){
   const plantPos = V3(sd.plant[0], 0, sd.plant[1]);
   const stagePt = G.map.stages?.[site];
   const stagePos = stagePt ? V3(stagePt[0],0,stagePt[1]) : plantPos;
+  const stg = m.strategy || { pace:'default', coord:'group' };
+
+  // 分配进攻角色（entry / scout / flank / support）
+  if(!a.assaultRole){
+    const roles = ['entry','entry','scout','flank','support'];
+    a.assaultRole = roles[a.role % roles.length];
+    // 延迟出发时间
+    const baseDelay = stg.pace==='rush'?.5: stg.pace==='slow'?2.5:1.2;
+    a.planStartAt = G.now + a.role * .15 + baseDelay * gauss();
+  }
 
   if(sp.state==='dropped'){
     if(!sp.claimer || !sp.claimer.alive) sp.claimer = bot;
@@ -609,7 +619,8 @@ function thinkAttack(bot){
   }
   if(sp.state==='planted'){
     if(!a.hold){
-      const h = pick(G.map.atkHolds[sp.site]);
+      const holds = G.map.atkHolds[sp.site] || [];
+      const h = holds[a.role % holds.length];
       a.hold = V3(h.p[0],0,h.p[1]); a.holdLook = V3(h.look[0],1.5,h.look[1]);
     }
     a.state='hold'; a.goal = a.hold;
@@ -617,12 +628,7 @@ function thinkAttack(bot){
     return;
   }
 
-  if(G.now < a.planStartAt){
-    // 开局前 1 秒内先向集结点慢走，避免站在原地
-    const preGoal = a.goal || stagePos;
-    if(preGoal) moveDirect(bot, preGoal, dt, false);
-    return;
-  }
+  if(G.now < a.planStartAt){ return; }
 
   // 转点重置
   if(m.planSwitchedAt && a.planSite !== site && a.state!=='hunt'){
@@ -630,7 +636,9 @@ function thinkAttack(bot){
   }
   a.planSite = site;
 
-  const isLurker = a.role===3 && sp.carrier!==bot && G.map.siteKeys.length>1 && D()>.6;
+  // 分工路线
+  const isLurker = a.assaultRole==='flank' && sp.carrier!==bot && G.map.siteKeys.length>1;
+  const isScout  = a.assaultRole==='scout' && !isLurker;
 
   switch(a.state){
     case 'wait': {
@@ -641,6 +649,9 @@ function thinkAttack(bot){
         const os = G.map.stages?.[other];
         if(os) dest = V3(os[0],0,os[1]);
         a.flags.lurk = true;
+      } else if(isScout){
+        // scout goes slightly off-axis from main push
+        dest = V3(stagePos.x + rand(-4,4), 0, stagePos.z + rand(-4,4));
       }
       a.goal = dest.clone();
       setPath(bot, a.goal);
@@ -653,19 +664,20 @@ function thinkAttack(bot){
       break;
     }
     case 'stage': {
-      // 集合判定：主攻组到齐或超时 → 触发齐推
       if(!a.flags.lurk){
         const mates = G.ents.filter(e=>e.alive && sideOf(e)==='atk' && !e.isPlayer && !e.ai?.flags.lurk);
-        const near = mates.filter(e=>dist2d(e.pos, stagePos) < 11).length;
-        const need = Math.min(2, mates.length);
-        if(!m.executeT && (near >= need || G.now - a.stageAt > 5)){
+        const near = mates.filter(e=>dist2d(e.pos, stagePos) < 13).length;
+        const need = Math.max(1, Math.ceil(mates.length * (stg.coord==='group'?.6:.3)));
+        if(!m.executeT && (near >= need || G.now - a.stageAt > (stg.pace==='rush'?3:stg.pace==='slow'?9:5))){
           m.executeT = G.now; m.execSite = site;
         }
       }
       if(m.executeT && (m.execSite===site || a.flags.lurk)){
         a.state = 'execute';
-        const off = V3(rand(-3.5,3.5), 0, rand(-3.5,3.5));
-        a.goal = (sp.carrier===bot ? plantPos.clone() : plantPos.clone().add(off));
+        const holds = G.map.atkHolds[site] || [];
+        const h = holds[a.role % holds.length];
+        a.hold = V3(h.p[0],0,h.p[1]); a.holdLook = V3(h.look[0],1.5,h.look[1]);
+        a.goal = (sp.carrier===bot ? plantPos.clone() : a.hold.clone());
         setPath(bot, a.goal);
       }
       break;
@@ -674,10 +686,7 @@ function thinkAttack(bot){
       if(sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, plantPos) < 4){
         a.state = 'plant';
       } else if(dist2d(bot.pos, a.goal) < 3){
-        const h = pick(G.map.atkHolds[site]);
-        a.hold = V3(h.p[0],0,h.p[1]); a.holdLook = V3(h.look[0],1.5,h.look[1]);
-        a.goal = a.hold; a.state='hold';
-        setPath(bot, a.hold);
+        a.state='hold'; setPath(bot, a.goal);
       } else if(needRepath(bot, a.goal)) setPath(bot, a.goal);
       break;
     }
@@ -697,7 +706,6 @@ function thinkAttack(bot){
     default: a.state = 'wait';
   }
 
-  // 携包者若已齐推且到点直接下包
   if(sp.state==='carried' && sp.carrier===bot && m.executeT && a.state!=='plant' && inSite(bot.pos)){
     a.state = 'plant';
   }

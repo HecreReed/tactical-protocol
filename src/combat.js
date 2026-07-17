@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=11';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=11';
-import { WIDE } from './config.js?v=11';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=11';
-import { sfx } from './audio.js?v=11';
+import { G } from './state.js?v=12';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=12';
+import { WIDE } from './config.js?v=12';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=12';
+import { sfx } from './audio.js?v=12';
 
 let nextId = 1;
 
@@ -64,8 +64,7 @@ export function moveSpeed(ent){
 // ---------- collision ----------
 function collideAxis(ent, axis, r, h){
   const p = ent.pos;
-  // 上升时不允许"跨越"障碍顶部（防止穿入箱体后被吸到顶上）；着地/下落时允许 0.35 的平滑跨坎
-  const step = ent.vel.y > 1 ? .04 : .35;
+  const step = ent.vel.y > 2 ? .2 : .35;  // 上升稍严防止穿箱，但不过分硬以免视角抖
   const all = [G.colliders, G.dynColliders];
   for(const list of all) for(const b of list){
     if(p.y + h <= b.min.y + .08 || p.y + step >= b.max.y) continue;
@@ -279,7 +278,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=11';
+import { AGENTS } from './config.js?v=12';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
