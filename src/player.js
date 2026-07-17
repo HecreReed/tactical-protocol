@@ -360,6 +360,58 @@ function spectate(dt){
   cam.updateProjectionMatrix();
 }
 
+let obsTarget = null;
+let obsPos = new THREE.Vector3(0, 6, 0);
+let obsYaw = 0, obsPitch = -0.25;
+export function updateObserver(dt){
+  const cam = G.camera;
+  const alive = G.ents.filter(e=>e.alive);
+  // 按空格循环目标，或当前目标死亡时自动换
+  if(alive.length){
+    if(!obsTarget || !obsTarget.alive){
+      P.spectateIdx = 0;
+      obsTarget = alive[0];
+    }
+    const t = alive[P.spectateIdx % alive.length];
+    if(t !== obsTarget) obsTarget = t;
+    G.spectatingEnt = t;
+    // 第三人称：目标身后上方，看向前方
+    const d = 3.2;
+    const tx = t.pos.x - Math.sin(t.yaw)*d;
+    const tz = t.pos.z - Math.cos(t.yaw)*d;
+    const ty = t.pos.y + 2.4;
+    obsPos.lerp(new THREE.Vector3(tx, ty, tz), Math.min(1, dt*6));
+    cam.position.copy(obsPos);
+    cam.rotation.order = 'YXZ';
+    const targetYaw = t.yaw;
+    const targetPitch = -0.18;
+    // 平滑插值角度
+    let dy = targetYaw - obsYaw;
+    while(dy > Math.PI) dy -= Math.PI*2;
+    while(dy < -Math.PI) dy += Math.PI*2;
+    obsYaw += dy * Math.min(1, dt*5);
+    obsPitch += (targetPitch - obsPitch) * Math.min(1, dt*5);
+    cam.rotation.y = obsYaw;
+    cam.rotation.x = obsPitch;
+    cam.rotation.z = 0;
+  } else {
+    G.spectatingEnt = null;
+    cam.position.lerp(new THREE.Vector3(0, 42, 12), Math.min(1, dt*3));
+    cam.rotation.order = 'YXZ';
+    cam.rotation.set(-1.25, 0, 0);
+  }
+  cam.fov = lerp(cam.fov, G.settings.fov, dt*10);
+  cam.updateProjectionMatrix();
+  if(vmGroup) vmGroup.visible = false;
+}
+
 window.addEventListener('mousedown', ()=>{
   if(G.player && !G.player.alive) P.spectateIdx++;
+});
+window.addEventListener('keydown', e=>{
+  if(!G.player && e.code==='Space'){
+    P.spectateIdx++;
+    const alive = G.ents.filter(e=>e.alive);
+    if(alive.length) obsTarget = alive[P.spectateIdx % alive.length];
+  }
 });

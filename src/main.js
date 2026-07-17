@@ -3,10 +3,10 @@ import { G } from './state.js';
 import { buildMap } from './map.js';
 import { initFX, updateFX, pulseBarriers } from './effects.js';
 import { initAudio } from './audio.js';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js';
-import { initPlayerInput, updatePlayer, buildViewModel } from './player.js';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=7';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=7';
 import { updateBots } from './bots.js';
-import { startMatch, updateGame } from './game.js';
+import { startMatch, updateGame } from './game.js?v=7';
 import { updateProjectiles, tickHealAndZones } from './abilities.js';
 
 let started = false;
@@ -96,6 +96,7 @@ function initPointerLock(){
   const request = ()=>{
     if(!started || G.buyOpen || G.menuOpen) return;
     if(G.match?.phase==='over') return;
+    if(G.observer) return;
     el.requestPointerLock();
   };
   el.addEventListener('click', request);
@@ -120,7 +121,8 @@ function loop(){
 
   if(started){
     updateGame(dt);
-    updatePlayer(dt);
+    if(G.player) updatePlayer(dt);
+    else if(G.observer) updateObserver(dt);
     updateBots(dt);
     updateProjectiles(dt);
     tickHealAndZones(dt);
@@ -138,15 +140,15 @@ function boot(){
   initPlayerInput();
   initPointerLock();
 
-  showAgentSelect((mapId, agentKey)=>{
+  showAgentSelect((mapId, agentKey, observer)=>{
     initAudio();
     buildMap(G.scene, mapId);
     buildLights(G.map.data);
     renderMinimapStatic();
-    startMatch(agentKey);
-    buildViewModel();
+    startMatch(agentKey, observer);
+    if(!observer) buildViewModel();
     started = true;
-    setBuyOpen(true);
+    if(!observer) setBuyOpen(true);
   });
 
   loop();

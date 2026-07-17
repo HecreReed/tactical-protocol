@@ -50,6 +50,7 @@ function stdBarriers(defRects){
   rooms.push(room(-34,-28,-22,-20)); // B site room
   rooms.push(room(22,-28,34,-20));   // A site room
   rooms.push(room(-6,-28,6,-20));    // bottom mid
+  rooms.push(room(-38,-38,38,-30));  // def spawn
 
   // spawn to top (no straight to site)
   corridors.push(corridor([[-28,30],[-28,24]],W));
@@ -65,6 +66,10 @@ function stdBarriers(defRects){
   corridors.push(corridor([[28,-12],[28,-18],[28,-24]],W));
   // mid wing with a jog
   corridors.push(corridor([[0,20],[0,8],[0,-4],[0,-12],[0,-20]],W));
+  // def spawn connectors
+  corridors.push(corridor([[-28,-30],[-28,-24]],W));
+  corridors.push(corridor([[28,-30],[28,-24]],W));
+  corridors.push(corridor([[0,-30],[0,-24]],W));
   // cross alleys (loops / small paths)
   corridors.push(corridor([[-22,24],[-12,24],[-12,8],[-18,8]],W-1));
   corridors.push(corridor([[22,24],[12,24],[12,8],[18,8]],W-1));
@@ -73,6 +78,8 @@ function stdBarriers(defRects){
   corridors.push(corridor([[-22,-8],[-6,-8]],W-1));
   corridors.push(corridor([[22,-8],[6,-8]],W-1));
   corridors.push(corridor([[-18,-24],[18,-24]],W-1));
+  // A-B direct small path through def spawn area
+  corridors.push(corridor([[-28,-34],[28,-34]],W-1));
 
   const sites={
     A:{rect:[22,-28,34,-20], plant:[28,-24]},
@@ -126,6 +133,7 @@ function stdBarriers(defRects){
   rooms.push(room(-34,-28,-22,-20)); // C
   rooms.push(room(-8,-28,8,-20));    // B
   rooms.push(room(22,-28,34,-20));   // A
+  rooms.push(room(-38,-38,38,-30));  // def spawn
 
   corridors.push(corridor([[-28,30],[-28,24]],W));
   corridors.push(corridor([[0,30],[0,24]],W));
@@ -137,6 +145,11 @@ function stdBarriers(defRects){
   corridors.push(corridor([[-28,-12],[-28,-18],[-28,-24]],W));
   corridors.push(corridor([[28,-12],[28,-18],[28,-24]],W));
   corridors.push(corridor([[0,20],[0,14],[4,14],[4,8],[0,8],[0,-4],[0,-12],[0,-20]],W));
+  // def spawn connectors
+  corridors.push(corridor([[-28,-30],[-28,-24]],W));
+  corridors.push(corridor([[0,-30],[0,-24]],W));
+  corridors.push(corridor([[28,-30],[28,-24]],W));
+  corridors.push(corridor([[-18,-34],[18,-34]],W-1));
   corridors.push(corridor([[-22,24],[-12,24],[-12,8],[-18,8]],W-1));
   corridors.push(corridor([[22,24],[12,24],[12,8],[18,8]],W-1));
   corridors.push(corridor([[-24,0],[-8,0]],W-1));
@@ -211,6 +224,11 @@ function stdBarriers(defRects){
   corridors.push(corridor([[-22,-14],[-22,-20],[-22,-24]],W));
   corridors.push(corridor([[22,-14],[22,-20],[22,-24]],W));
   corridors.push(corridor([[0,18],[0,10],[0,2],[4,2],[4,-6],[0,-6],[0,-14],[0,-20]],W));
+  // def spawn connectors
+  corridors.push(corridor([[-22,-30],[-22,-24]],W));
+  corridors.push(corridor([[22,-30],[22,-24]],W));
+  corridors.push(corridor([[0,-30],[0,-24]],W));
+  corridors.push(corridor([[-14,-34],[14,-34]],W-1));
   corridors.push(corridor([[-16,22],[-8,22],[-8,6],[-16,6]],W-1));
   corridors.push(corridor([[16,22],[8,22],[8,6],[16,6]],W-1));
   corridors.push(corridor([[-22,0],[0,0]],W-1));

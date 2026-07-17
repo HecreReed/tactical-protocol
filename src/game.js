@@ -17,7 +17,8 @@ let spikeMesh = null, nextBeep = 0;
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-export function startMatch(agentKey){
+export function startMatch(agentKey, observer=false){
+  G.observer = observer;
   const m = G.match = {
     round: 0, phase: 'buy', tPhase: 0,
     score: { ally: 0, enemy: 0 },
@@ -33,19 +34,32 @@ export function startMatch(agentKey){
     winner: null,
   };
 
-  // 每队 5 名特工不重复；机器人直接以特工为名
-  const player = makeEnt({ name:'你', team:'ally', agent:agentKey, isPlayer:true });
-  G.player = player;
-  G.ents.push(player);
-  initAbilities(player);
+  if(observer){
+    // 观战模式：没有玩家，5v5 全 AI
+    G.player = null;
+    const allyAgents = shuffle([...AGENT_LIST]).slice(0,5);
+    allyAgents.forEach((ag,i)=>{
+      const b = makeEnt({ name:AGENTS[ag].name, team:'ally', agent:ag });
+      initAbilities(b); initBotAI(b, i);
+      buildBody(b);
+      G.ents.push(b);
+    });
+  } else {
+    // 每队 5 名特工不重复；机器人直接以特工为名
+    const player = makeEnt({ name:'你', team:'ally', agent:agentKey, isPlayer:true });
+    G.player = player;
+    G.ents.push(player);
+    initAbilities(player);
 
-  const allyAgents = shuffle(AGENT_LIST.filter(a=>a!==agentKey)).slice(0,4);
-  allyAgents.forEach((ag,i)=>{
-    const b = makeEnt({ name:AGENTS[ag].name, team:'ally', agent:ag });
-    initAbilities(b); initBotAI(b, i);
-    buildBody(b);
-    G.ents.push(b);
-  });
+    const allyAgents = shuffle(AGENT_LIST.filter(a=>a!==agentKey)).slice(0,4);
+    allyAgents.forEach((ag,i)=>{
+      const b = makeEnt({ name:AGENTS[ag].name, team:'ally', agent:ag });
+      initAbilities(b); initBotAI(b, i);
+      buildBody(b);
+      G.ents.push(b);
+    });
+  }
+
   const enemyAgents = shuffle([...AGENT_LIST]).slice(0,5);
   enemyAgents.forEach((ag,i)=>{
     const b = makeEnt({ name:AGENTS[ag].name, team:'enemy', agent:ag });
@@ -124,15 +138,15 @@ export function startRound(){
 
   // give spike to a random attacker (prefer player)
   const attackers = G.ents.filter(e=>sideOf(e)==='atk');
-  const carrier = attackers.find(e=>e.isPlayer) && Math.random()<.6
-    ? attackers.find(e=>e.isPlayer) : pick(attackers);
+  const playerAtk = attackers.find(e=>e.isPlayer);
+  const carrier = playerAtk && Math.random()<.6 ? playerAtk : pick(attackers);
   m.spike.state = 'carried';
   m.spike.carrier = carrier;
 
   // bots buy
   for(const e of G.ents) if(!e.isPlayer) botBuy(e);
 
-  buildViewModel();
+  if(G.player) buildViewModel();
   sfx.roundStart();
   G.hooks.banner?.(`回合 ${m.round}`, m.allySide==='atk'?'进攻方 — 安放 Spike':'防守方 — 守住点位', 2.2);
   G.hooks.refreshBuy?.();

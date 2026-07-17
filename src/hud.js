@@ -17,7 +17,8 @@ export function initHUD(){
     hud: $('hud'), scoreAlly: $('scoreAlly'), scoreEnemy: $('scoreEnemy'),
     clock: $('clock'), roundLabel: $('roundLabel'), sideTag: $('sideTag'),
     dotsAlly: $('dotsAlly'), dotsEnemy: $('dotsEnemy'),
-    hpNum: $('hpNum'), armorNum: $('armorNum'), hpBar: $('hpBar').firstElementChild, armorBar: $('armorBar').firstElementChild,
+    hpNum: $('hpNum'), armorNum: $('armorNum'), hpBox: $('hpBox'), ammoBox: $('ammoBox'),
+    hpBar: $('hpBar').firstElementChild, armorBar: $('armorBar').firstElementChild,
     money: $('moneyBox'), ultPts: $('ultPts'),
     ammoNum: $('ammoNum'), weapName: $('weapName'),
     slot1: $('slot1'), slot2: $('slot2'), slot3: $('slot3'),
@@ -183,10 +184,23 @@ export function showAgentSelect(cb){
     card.onclick = ()=>{
       els.agentSelect.classList.add('hidden');
       els.hud.classList.remove('hidden');
-      cb(mapSel, key);
+      cb(mapSel, key, false);
     };
     els.agentCards.appendChild(card);
   }
+  // 观战模式按钮
+  const obsBtn = document.createElement('button');
+  obsBtn.className = 'obsBtn';
+  obsBtn.textContent = '🎥 观战模式（只看 AI 对战）';
+  obsBtn.style.cssText = 'margin-top:14px;padding:10px 22px;font-size:15px;background:#1a2a36;border:1px solid #39d0c9;color:#39d0c9;border-radius:6px;cursor:pointer;';
+  obsBtn.onmouseenter = ()=> obsBtn.style.background='#223644';
+  obsBtn.onmouseleave = ()=> obsBtn.style.background='#1a2a36';
+  obsBtn.onclick = ()=>{
+    els.agentSelect.classList.add('hidden');
+    els.hud.classList.remove('hidden');
+    cb(mapSel, null, true);
+  };
+  els.agentCards.parentElement.appendChild(obsBtn);
 }
 
 // ---------- buy ----------
@@ -327,7 +341,11 @@ function matchOver(winner){
   els.endTitle.textContent = won ? '胜 利' : '失 败';
   els.endTitle.className = `big ${won?'win':'lose'}`;
   const m = G.match;
-  els.endSub.textContent = `${m.score.ally} : ${m.score.enemy} — 你 ${G.player.kills} 杀 / ${G.player.deaths} 死`;
+  if(G.player){
+    els.endSub.textContent = `${m.score.ally} : ${m.score.enemy} — 你 ${G.player.kills} 杀 / ${G.player.deaths} 死`;
+  } else {
+    els.endSub.textContent = `${m.score.ally} : ${m.score.enemy} — 观战结束`;
+  }
 }
 
 // ---------- minimap ----------
@@ -369,13 +387,18 @@ function drawMinimap(){
   const m = G.match;
 
   // visible enemies (cache 0.25s)
-  if(G.now - visCache.t > .25 && G.player?.alive){
+  if(G.now - visCache.t > .25){
     visCache.t = G.now;
     visCache.list = [];
-    const pe = eyePos(G.player);
-    for(const e of G.ents){
-      if(e.team!=='enemy' || !e.alive) continue;
-      if(G.now < (e.revealedUntil||0) || !losBlocked(pe, eyePos(e))) visCache.list.push(e);
+    if(G.player?.alive){
+      const pe = eyePos(G.player);
+      for(const e of G.ents){
+        if(e.team!=='enemy' || !e.alive) continue;
+        if(G.now < (e.revealedUntil||0) || !losBlocked(pe, eyePos(e))) visCache.list.push(e);
+      }
+    } else if(!G.player){
+      // 观战模式显示所有存活 AI
+      for(const e of G.ents) if(e.alive) visCache.list.push(e);
     }
   }
 
@@ -396,12 +419,21 @@ function drawMinimap(){
       g.beginPath(); g.arc(x,y,3,0,7); g.fill();
     }
   }
-  // visible enemies
-  g.fillStyle = '#ff4655';
+  // 玩家可见敌人 / 观战全图
   for(const e of visCache.list){
     if(!e.alive) continue;
     const [x,y] = P(e.pos);
+    g.fillStyle = e.team==='ally' ? '#39d0c9' : '#ff4655';
     g.beginPath(); g.arc(x,y,3,0,7); g.fill();
+  }
+  // 非观战模式仍按常规显示队友
+  if(G.player){
+    for(const e of G.ents){
+      if(!e.alive || e.team!=='ally' || e.isPlayer) continue;
+      const [x,y] = P(e.pos);
+      g.fillStyle = '#39d0c9';
+      g.beginPath(); g.arc(x,y,3,0,7); g.fill();
+    }
   }
   // player wedge
   const p = G.player;
@@ -421,7 +453,7 @@ function drawMinimap(){
 // ---------- per-frame ----------
 export function updateHUD(){
   const m = G.match, p = G.player;
-  if(!m || !p) return;
+  if(!m) return;
 
   els.scoreAlly.textContent = m.score.ally;
   els.scoreEnemy.textContent = m.score.enemy;
@@ -447,6 +479,26 @@ export function updateHUD(){
   };
   dots(els.dotsAlly, allies);
   dots(els.dotsEnemy, enemies);
+
+  if(!p){
+    // 观战模式：隐藏玩家专属 UI，保留雷达/队伍状态
+    els.hpBox?.classList.add('hidden');
+    els.ammoBox?.classList.add('hidden');
+    els.money?.classList.add('hidden');
+    els.ultPts?.parentElement?.classList.add('hidden');
+    els.abilityBox?.classList.add('hidden');
+    els.crosshair.style.display = 'none';
+    els.scope.classList.add('hidden');
+    drawMinimap();
+    renderTeamBar();
+    return;
+  }
+  // 正常模式确保 UI 显示
+  els.hpBox?.classList.remove('hidden');
+  els.ammoBox?.classList.remove('hidden');
+  els.money?.classList.remove('hidden');
+  els.ultPts?.parentElement?.classList.remove('hidden');
+  els.abilityBox?.classList.remove('hidden');
 
   // hp
   els.hpNum.textContent = Math.ceil(p.hp);
