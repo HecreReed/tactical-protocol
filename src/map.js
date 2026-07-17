@@ -700,17 +700,52 @@ export function buildNav(md, colliders){
     }
   }
 
-  // 从进攻出生点之一开始 BFS
+  // 先找出进攻出生点可达的最大连通区域，再在该区域内剪死胡同
   const startCells = md.spawns.atk.map(([x,z])=>`${Math.floor(x)},${Math.floor(z)}`).filter(k=>cells.has(k));
   const start = startCells.length ? idx.get(startCells[0]) : 0;
-  const seen=new Set([start]), q=[start];
-  while(q.length){const c=q.shift();for(const n of edges[c])if(!seen.has(n)){seen.add(n);q.push(n);}}
+  const mainSet=new Set([start]), q=[start];
+  while(q.length){const c=q.shift();for(const n of edges[c])if(!mainSet.has(n)){mainSet.add(n);q.push(n);}}
+  if(mainSet.size!==wps.length) console.warn(`[map ${md.id}] nav disconnected cells: ${wps.length-mainSet.size}`);
 
-  if(seen.size!==wps.length) console.warn(`[map ${md.id}] nav disconnect: ${seen.size}/${wps.length}`);
+  // 剪掉死胡同：在最大连通区域内，保留 protected 点（出生点、点位、预设防守/集结位、要道）
+  return pruneDeadEnds(wps, edges, md, mainSet);
+}
 
+function pruneDeadEnds(wps, edges, md, mainSet){
+  const n=wps.length;
+  const keep=new Array(n).fill(false);
+  for(const i of mainSet) keep[i]=true;
+  const protect=new Array(n).fill(false);
+  const inRectW=(w,r)=> w.x>=r[0]-.5 && w.x<=r[2]+.5 && w.z>=r[1]-.5 && w.z<=r[3]+.5;
+  for(let i=0;i<n;i++){
+    if(!keep[i]) continue;
+    const w=wps[i];
+    const near=(x,z,rad)=>Math.hypot(w.x-x,w.z-z)<rad;
+    for(const [x,z] of md.spawns.atk) if(near(x,z,3)){ protect[i]=true; break; }
+    for(const [x,z] of md.spawns.def) if(near(x,z,3)){ protect[i]=true; break; }
+    if(!protect[i]) for(const k of Object.keys(md.sites||{})) if(inRectW(w,md.sites[k].rect)){ protect[i]=true; break; }
+    if(!protect[i]) for(const p of md.defPostList||[]) if(near(p.p[0],p.p[1],3)){ protect[i]=true; break; }
+    if(!protect[i]) for(const k of Object.keys(md.atkHolds||{})) for(const h of md.atkHolds[k]) if(near(h.p[0],h.p[1],3)){ protect[i]=true; break; }
+    if(!protect[i]) for(const k of Object.keys(md.stages||{})){ const s=md.stages[k]; if(near(s[0],s[1],3)){ protect[i]=true; break; } }
+    if(!protect[i]) for(const k of Object.keys(md.chokes||{})){ const c=md.chokes[k]; if(near(c[0],c[1],2.5)){ protect[i]=true; break; } }
+    if(!protect[i]) for(const k of Object.keys(md.smokePoints||{})) for(const p of md.smokePoints[k]) if(near(p[0],p[1],2)){ protect[i]=true; break; }
+  }
+  const deg=edges.map(e=>e.length);
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(let i=0;i<n;i++) if(keep[i] && !protect[i] && deg[i]<=1){
+      keep[i]=false; changed=true;
+      for(const nb of edges[i]) if(keep[nb]) deg[nb]--;
+    }
+  }
   const remap=new Map(), outW=[], outE=[];
-  for(let i=0;i<wps.length;i++) if(seen.has(i)){remap.set(i,outW.length); outW.push(wps[i]); outE.push([]);}
-  for(let i=0;i<wps.length;i++) if(seen.has(i)) for(const j of edges[i]) if(seen.has(j)) outE[remap.get(i)].push(remap.get(j));
+  for(let i=0;i<n;i++) if(keep[i]){ remap.set(i,outW.length); outW.push(wps[i]); outE.push([]); }
+  for(let i=0;i<n;i++) if(keep[i]) for(const j of edges[i]) if(keep[j]) outE[remap.get(i)].push(remap.get(j));
+  // 二次验证连通性
+  const comp=new Array(outW.length).fill(-1); let cid=0;
+  for(let i=0;i<outW.length;i++) if(comp[i]===-1){ const q=[i]; comp[i]=cid; while(q.length){ const c=q.shift(); for(const nb of outE[c]) if(comp[nb]===-1){ comp[nb]=cid; q.push(nb);} } cid++; }
+  if(cid>1) console.warn(`[map ${md.id}] nav components after prune: ${cid}`);
   return {wps:outW, edges:outE};
 }
 
@@ -907,6 +942,24 @@ export function buildMap(scene, mapId){
     barriers:md.barriers.map(b=>({min:V3(b.rect[0],0,b.rect[1]),max:V3(b.rect[2],4,b.rect[3]),side:b.side})),
     accent:md.accent,mmExtra
   };
+
+  // 确保出生点不在墙里 / 地图外：若非法则吸附到最近可用导航格
+  function safeSpawn(pos){
+    const open=G.map.openRects;
+    const inAny=(x,z)=>open.some(r=>x>=r[0]&&x<=r[2]&&z>=r[1]&&z<=r[3]);
+    const inSolid=(x,z)=>G.colliders.some(b=>b.max.y>0.5 && x>=b.min.x-0.35 && x<=b.max.x+0.35 && z>=b.min.z-0.35 && z<=b.max.z+0.35);
+    if(inAny(pos.x,pos.z) && !inSolid(pos.x,pos.z)) return;
+    let best=null,bd=Infinity;
+    for(const w of G.map.wps){
+      if(!inAny(w.x,w.z)) continue;
+      if(inSolid(w.x,w.z)) continue;
+      const d=Math.hypot(w.x-pos.x,w.z-pos.z);
+      if(d<bd){ bd=d; best=w; }
+    }
+    if(best){ pos.x=best.x; pos.z=best.z; }
+  }
+  for(const s of G.map.spawns.atk) safeSpawn(s.pos);
+  for(const s of G.map.spawns.def) safeSpawn(s.pos);
 }
 
 export function validateMaps(){
@@ -953,10 +1006,10 @@ function smoothPath(indices){
 export function findPath(fromPos,toPos){
   const a=nearestWp(fromPos), b=nearestWp(toPos);
   const {wps,edges}=G.map;
-  if(a===b) return [wps[b].clone ? wps[b].clone() : V3(wps[b].x,wps[b].y,wps[b].z)];
+  if(a===b) return [];
   const prev=new Array(wps.length).fill(-1), q=[a]; prev[a]=a;
   while(q.length){ const cur=q.shift(); if(cur===b) break; for(const nx of edges[cur]) if(prev[nx]===-1){ prev[nx]=cur; q.push(nx); } }
-  if(prev[b]===-1) return [wps[b]];
+  if(prev[b]===-1) return [];
   const raw=[]; let c=b; while(c!==a){ raw.push(c); c=prev[c]; } raw.push(a); raw.reverse();
   const smooth = smoothPath(raw);
   return smooth.map(i=> wps[i].clone ? wps[i].clone() : V3(wps[i].x,wps[i].y,wps[i].z));

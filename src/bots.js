@@ -29,7 +29,7 @@ export function resetBotRound(ent){
   a.target = null; a.lastSeenAt = -9; a.burstLeft = 0; a.acqT = 0;
   a.flags = {}; a.abGate = 0; a.rotated = false;
   a.stuckT = 0; a.sideUntil = 0; a.state = 'wait'; a.stageAt = 0;
-  a.planStartAt = G.now + rand(.5, 3);
+  a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
 }
@@ -63,8 +63,9 @@ function findTarget(bot){
 
 function setPath(bot, dest){
   const a = bot.ai;
-  a.path = findPath(bot.pos, dest);
-  a.path.push(dest.clone ? dest.clone() : V3(dest.x,0,dest.z));
+  const raw = findPath(bot.pos, dest);
+  a.path = raw.length ? raw : [];
+  if(raw.length) a.path.push(dest.clone ? dest.clone() : V3(dest.x,0,dest.z));
   a.pathI = 0;
   a.repathT = G.now + 3;
 }
@@ -575,7 +576,12 @@ function thinkAttack(bot){
     return;
   }
 
-  if(G.now < a.planStartAt){ bot.vel.x*=.8; bot.vel.z*=.8; return; }
+  if(G.now < a.planStartAt){
+    // 开局前 1 秒内先向集结点慢走，避免站在原地
+    const preGoal = a.goal || stagePos;
+    if(preGoal) moveDirect(bot, preGoal, dt, false);
+    return;
+  }
 
   // 转点重置
   if(m.planSwitchedAt && a.planSite !== site && a.state!=='hunt'){
@@ -610,8 +616,8 @@ function thinkAttack(bot){
       if(!a.flags.lurk){
         const mates = G.ents.filter(e=>e.alive && sideOf(e)==='atk' && !e.isPlayer && !e.ai?.flags.lurk);
         const near = mates.filter(e=>dist2d(e.pos, stagePos) < 11).length;
-        const need = Math.min(3, mates.length);
-        if(!m.executeT && (near >= need || G.now - a.stageAt > 9)){
+        const need = Math.min(2, mates.length);
+        if(!m.executeT && (near >= need || G.now - a.stageAt > 5)){
           m.executeT = G.now; m.execSite = site;
         }
       }
@@ -707,6 +713,34 @@ function needRepath(bot, dest){
   return dist2d(last, dest) > 3;
 }
 
+// 无路点时的兜底直走：贴墙会自己绕
+function moveDirect(bot, goal, dt, sprint=true){
+  const a=bot.ai;
+  const ty=yawTo(bot.pos, goal);
+  bot.yaw += angDiff(bot.yaw, ty)*Math.min(1, dt*6);
+  const spd=moveSpeed(bot)*(sprint?1:.55);
+  const dx=goal.x-bot.pos.x, dz=goal.z-bot.pos.z;
+  const l=Math.hypot(dx,dz)||1;
+  let mx=dx/l, mz=dz/l;
+  const feet=V3(bot.pos.x, bot.pos.y+.7, bot.pos.z);
+  const fwd=V3(mx,0,mz);
+  const aheadD=rayWalls(feet, fwd, 1.5);
+  if(aheadD < 1.2){
+    const leftX=-mz, leftZ=mx, rightX=mz, rightZ=-mx;
+    const ld=rayWalls(feet, V3(leftX,0,leftZ), 1.4);
+    const rd=rayWalls(feet, V3(rightX,0,rightZ), 1.4);
+    if(ld>.8 || rd>.8){
+      const sx=ld>rd?leftX:rightX, sz=ld>rd?leftZ:rightZ;
+      mx=mx*.35+sx*.85; mz=mz*.35+sz*.85; const n=Math.hypot(mx,mz); mx/=n; mz/=n;
+    } else {
+      mx*=.25; mz*=.25;
+    }
+  }
+  bot.vel.x=mx*spd; bot.vel.z=mz*spd;
+  bot.stepAcc += spd*dt;
+  if(bot.stepAcc > 2.8){ bot.stepAcc=0; if(G.player?.alive) sfx.step(dist2d(bot.pos,G.player.pos)); G.hooks.noise?.(bot.pos, bot); }
+}
+
 function navUpdate(bot, dt){
   const a = bot.ai, m = G.match, sp = m.spike;
 
@@ -716,7 +750,8 @@ function navUpdate(bot, dt){
     return;
   }
   if(a.state==='plant'){
-    const arrived0 = a.path.length ? followPath(bot, dt, true) : true;
+    const arrived0 = a.path.length ? followPath(bot, dt, true) : false;
+    if(!arrived0 && a.goal) moveDirect(bot, a.goal, dt, true);
     if(arrived0 && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos)){
       bot.vel.x = 0; bot.vel.z = 0;
       G.hooks.plantTick?.(bot, dt);
@@ -729,7 +764,14 @@ function navUpdate(bot, dt){
     return;
   }
 
-  const arrived = a.path.length ? followPath(bot, dt, a.state!=='post') : true;
+  let arrived = false;
+  if(a.path.length){
+    arrived = followPath(bot, dt, a.state!=='post');
+  } else if(a.goal){
+    moveDirect(bot, a.goal, dt, a.state!=='post');
+  } else {
+    arrived = true;
+  }
   if(arrived && (a.hold || a.state==='stage')){
     // 驻守朝向：优先最近接敌情报，其次预设视角
     const c = m.contact[bot.team];
