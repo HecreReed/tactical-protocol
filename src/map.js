@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { G } from "./state.js";
 import { V3, rayAABB, dist2d } from "./utils.js";
-export const MAPS = [
+import { MAPS as NEW_MAPS } from "./mapData.js";
+const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
     sky:{ top:"#3d6b8f", mid:"#9fb8c8", bot:"#d8c9a8", fog:0x9fb8c8, fogFar:170, sun:0xfff2dd, sunPos:[35,60,25], hemi:[0xd8e8f0,0x3a4048] },
@@ -625,6 +626,8 @@ export const MAPS = [
   }
 ];
 
+export const MAPS = NEW_MAPS;
+
 const inRect = (x,z,r)=> x>=r[0]&&x<=r[2]&&z>=r[1]&&z<=r[3];
 
 export function inSite(pos){for(const k of Object.keys(G.map.sites)){if(inRect(pos.x,pos.z,G.map.sites[k].rect))return k;}return null;}
@@ -660,9 +663,9 @@ export function buildColliders(md, open){
 // 基于 1x1 单元格自动生成导航路点图；只保留从进攻出生点可达的连通区域
 export function buildNav(md, colliders){
   const open = md.open;
-  const MARGIN = 0.35;                 // 与墙体/掩体保持距离
+  const MARGIN = 0.45;                 // 与墙体/掩体保持距离（避免被矮箱卡住）
   const inAny = (x,z)=>open.some(r=>inRect(x,z,r));
-  const inSolid = (x,z)=>colliders.some(b=>b.max.y>0.5 && inRect(x,z,[b.min.x-MARGIN,b.min.z-MARGIN,b.max.x+MARGIN,b.max.z+MARGIN]));
+  const inSolid = (x,z)=>colliders.some(b=>b.max.y>=0.45 && inRect(x,z,[b.min.x-MARGIN,b.min.z-MARGIN,b.max.x+MARGIN,b.max.z+MARGIN]));
 
   const cells = new Map();             // key "ix,iz" -> {x,z}
   for(let ix=-40;ix<40;ix++){
