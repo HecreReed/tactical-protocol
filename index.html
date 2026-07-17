@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTICAL PROTOCOL — 网页战术射击</title>
+<style>
+:root{
+  --red:#ff4655; --teal:#39d0c9; --bg:#0f1923; --panel:rgba(15,25,35,.86);
+  --white:#ece8e1; --gold:#f5c56b; --dim:#8b978f;
+}
+*{margin:0;padding:0;box-sizing:border-box;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+  font-family:"DIN Alternate","Bahnschrift","Arial Narrow","PingFang SC","Microsoft YaHei",sans-serif;color:var(--white)}
+#app{position:fixed;inset:0}
+#app canvas{display:block}
+.hidden{display:none!important}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+#topbar{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;align-items:flex-start;gap:14px;padding-top:8px}
+.scorebox{min-width:64px;text-align:center;font-size:30px;font-weight:800;padding:2px 10px;background:var(--panel);border-bottom:3px solid}
+#scoreAlly{color:var(--teal);border-color:var(--teal)}
+#scoreEnemy{color:var(--red);border-color:var(--red)}
+#clockbox{text-align:center;background:var(--panel);padding:3px 16px 5px;border-bottom:3px solid #3a4a55;min-width:104px}
+#clock{font-size:26px;font-weight:800;letter-spacing:1px}
+#clock.danger{color:var(--red)}
+#roundLabel{font-size:11px;color:var(--dim);letter-spacing:2px}
+.alivedots{display:flex;gap:4px;margin-top:6px;justify-content:center}
+.alivedots i{width:9px;height:14px;background:#39d0c9;display:block;clip-path:polygon(0 0,100% 0,100% 70%,50% 100%,0 70%)}
+.alivedots.enemy i{background:var(--red)}
+.alivedots i.dead{background:#333d46}
+#sideTag{font-size:11px;letter-spacing:2px;color:var(--gold);text-align:center;margin-top:2px}
+
+#minimapBox{position:absolute;top:10px;left:10px;background:var(--panel);padding:5px;border:1px solid #24333f}
+#minimap{display:block}
+
+#killfeed{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.kf{background:var(--panel);border-right:3px solid var(--red);padding:4px 10px;font-size:13px;letter-spacing:.5px;opacity:.95}
+.kf .a{color:var(--teal);font-weight:700}.kf .a.enemy{color:var(--red)}
+.kf .v{color:var(--red);font-weight:700}.kf .v.ally{color:var(--teal)}
+.kf .w{color:var(--dim);margin:0 6px;font-size:11px}
+.kf .hs{color:var(--gold);font-weight:800}
+
+#hpBox{position:absolute;left:26px;bottom:22px;background:var(--panel);padding:10px 16px;min-width:210px;border-left:3px solid var(--teal)}
+#hpRow{display:flex;align-items:baseline;gap:10px}
+#hpNum{font-size:38px;font-weight:800;line-height:1}
+#armorNum{font-size:20px;font-weight:700;color:#9fb6c6}
+#armorNum::before{content:"🛡 ";font-size:14px}
+.bar{height:5px;background:#24333f;margin-top:6px;position:relative}
+.bar>i{position:absolute;inset:0;transform-origin:left;background:var(--white)}
+#armorBar>i{background:#9fb6c6}
+#moneyBox{position:absolute;left:26px;bottom:118px;font-size:22px;font-weight:800;color:var(--gold);background:var(--panel);padding:4px 14px}
+#ultBox{position:absolute;left:26px;bottom:160px;background:var(--panel);padding:4px 12px;font-size:13px;color:var(--dim)}
+#ultBox b{color:var(--white)}
+
+#ammoBox{position:absolute;right:26px;bottom:22px;text-align:right;background:var(--panel);padding:10px 18px;border-right:3px solid var(--red);min-width:190px}
+#ammoNum{font-size:38px;font-weight:800;line-height:1}
+#ammoNum span{font-size:20px;color:var(--dim)}
+#weapName{font-size:13px;letter-spacing:2px;color:var(--dim);margin-top:2px}
+#slots{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;font-size:11px;color:var(--dim)}
+#slots div{padding:2px 8px;background:#18242e;border:1px solid #24333f}
+#slots div.on{color:var(--white);border-color:var(--teal)}
+
+#abilityBox{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px}
+.ab{width:58px;height:58px;background:var(--panel);border:1px solid #2b3b47;position:relative;display:flex;align-items:center;justify-content:center}
+.ab.empty{opacity:.35}
+.ab .ic{font-size:24px}
+.ab .key{position:absolute;left:4px;top:2px;font-size:10px;color:var(--dim)}
+.ab .n{position:absolute;right:4px;bottom:2px;font-size:12px;font-weight:700;color:var(--gold)}
+.ab.ult{border-color:var(--gold)}
+.ab.ready{border-color:var(--teal);box-shadow:0 0 12px rgba(57,208,201,.35)}
+
+#center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:22px;height:22px}
+#crosshair i{position:absolute;background:#3fe0d8;box-shadow:0 0 2px #000}
+#crosshair .t{left:10px;top:0;width:2px;height:6px}
+#crosshair .b{left:10px;bottom:0;width:2px;height:6px}
+#crosshair .l{left:0;top:10px;width:6px;height:2px}
+#crosshair .r{right:0;top:10px;width:6px;height:2px}
+#hitmarker{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(45deg);width:26px;height:26px;opacity:0;transition:opacity .12s}
+#hitmarker i{position:absolute;background:#fff}
+#hitmarker .t{left:12px;top:0;width:2px;height:8px}
+#hitmarker .b{left:12px;bottom:0;width:2px;height:8px}
+#hitmarker .l{left:0;top:12px;width:8px;height:2px}
+#hitmarker .r{right:0;top:12px;width:8px;height:2px}
+#hitmarker.hs i{background:var(--red)}
+#interactTip{position:absolute;left:50%;top:60%;transform:translateX(-50%);font-size:15px;letter-spacing:2px;background:var(--panel);padding:6px 16px;border:1px solid #2b3b47}
+#progWrap{position:absolute;left:50%;top:66%;transform:translateX(-50%);width:280px;background:var(--panel);padding:8px 10px}
+#progLabel{font-size:12px;letter-spacing:3px;text-align:center;color:var(--gold);margin-bottom:6px}
+#progBar{height:8px;background:#24333f}#progBar>i{display:block;height:100%;background:var(--gold);width:0}
+#banner{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center}
+#bannerBig{font-size:52px;font-weight:900;letter-spacing:10px;text-shadow:0 2px 18px rgba(0,0,0,.7)}
+#bannerSub{font-size:15px;letter-spacing:4px;color:var(--dim);margin-top:6px}
+#spikeTag{position:absolute;left:50%;top:76px;transform:translateX(-50%);color:var(--red);font-size:13px;letter-spacing:3px;background:var(--panel);padding:4px 14px;border:1px solid var(--red)}
+#vignette{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,30,40,.55) 100%);transition:opacity .25s}
+#scope{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at center,transparent 26%,rgba(2,6,10,.985) 27%)}
+#scope::before,#scope::after{content:"";position:absolute;background:rgba(0,0,0,.8)}
+#scope::before{left:0;right:0;top:50%;height:1px}
+#scope::after{top:0;bottom:0;left:50%;width:1px}
+#teamBar{position:absolute;top:8px;left:260px;display:flex;flex-direction:column;gap:3px}
+.tm{display:flex;gap:8px;align-items:center;font-size:11px;background:var(--panel);padding:2px 8px;border-left:2px solid var(--teal);min-width:150px}
+.tm.dead{opacity:.35;border-left-color:#444}
+.tm .hp{color:var(--dim);margin-left:auto}
+
+/* ---------- Buy menu ---------- */
+#buyMenu{position:fixed;inset:6% 8%;background:rgba(10,17,24,.96);border:1px solid #24333f;z-index:20;padding:22px 30px;overflow-y:auto;pointer-events:auto}
+#buyMenu h1{font-size:22px;letter-spacing:6px;color:var(--white);border-bottom:2px solid var(--red);display:inline-block;padding-bottom:4px}
+#buyMoney{float:right;font-size:24px;color:var(--gold);font-weight:800}
+.buyCols{display:grid;grid-template-columns:1.5fr 1fr;gap:26px;margin-top:14px}
+.bcat{margin-bottom:10px}
+.bcat h3{font-size:12px;letter-spacing:3px;color:var(--dim);margin:10px 0 6px}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.bitem{background:#141f2a;border:1px solid #24333f;padding:8px 10px;cursor:pointer;position:relative}
+.bitem:hover{border-color:var(--teal);background:#182835}
+.bitem .nm{font-size:14px;font-weight:700;letter-spacing:1px}
+.bitem .pr{font-size:12px;color:var(--gold)}
+.bitem.owned{border-color:var(--teal)}
+.bitem.owned::after{content:"已装备";position:absolute;right:6px;top:6px;font-size:10px;color:var(--teal)}
+.bitem.noafford{opacity:.4;cursor:not-allowed}
+#buyClose{position:absolute;right:18px;top:14px;font-size:13px;color:var(--dim);cursor:pointer;letter-spacing:2px}
+#buyClose:hover{color:var(--white)}
+
+/* ---------- Scoreboard ---------- */
+#scoreboard{position:fixed;left:50%;top:12%;transform:translateX(-50%);width:640px;background:rgba(10,17,24,.95);border:1px solid #24333f;z-index:18;padding:16px 22px}
+#scoreboard h2{font-size:15px;letter-spacing:4px;margin-bottom:8px}
+#scoreboard table{width:100%;border-collapse:collapse;font-size:13px}
+#scoreboard th{color:var(--dim);font-weight:400;text-align:left;padding:3px 6px;font-size:11px;letter-spacing:1px}
+#scoreboard td{padding:4px 6px;border-top:1px solid #1d2a35}
+#scoreboard tr.me td{color:var(--gold)}
+#scoreboard tr.dead td{opacity:.45}
+.tAlly{color:var(--teal)} .tEnemy{color:var(--red)}
+
+/* ---------- Overlays ---------- */
+.overlay{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%,#16232f 0%,#0a121a 70%);z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;overflow-y:auto}
+.overlay h1{font-size:34px;letter-spacing:10px;font-weight:900}
+.overlay h1 span{color:var(--red)}
+.overlay .sub{color:var(--dim);letter-spacing:3px;font-size:13px;margin:8px 0 18px}
+#agentCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:1000px}
+.agentCard{width:150px;background:#131e29;border:1px solid #24333f;padding:14px 12px;cursor:pointer;transition:.15s;text-align:center}
+.agentCard:hover{border-color:var(--red);transform:translateY(-6px)}
+.agentCard .icon{font-size:38px;margin-bottom:4px}
+.agentCard h2{font-size:18px;letter-spacing:3px}
+.agentCard .role{color:var(--gold);font-size:11px;letter-spacing:2px;margin:2px 0 8px}
+.agentCard ul{list-style:none;text-align:left;font-size:11px;color:var(--dim);line-height:1.8}
+.agentCard ul b{color:var(--white)}
+#mapCards{display:flex;gap:12px;margin-bottom:16px}
+.mapCard{width:170px;background:#131e29;border:1px solid #24333f;padding:12px 14px;cursor:pointer;text-align:center;transition:.15s}
+.mapCard:hover{border-color:var(--teal)}
+.mapCard.sel{border-color:var(--teal);background:#15303a;box-shadow:0 0 14px rgba(57,208,201,.25)}
+.mapCard h3{font-size:18px;letter-spacing:4px}
+.mapCard .d{font-size:11px;color:var(--dim);margin-top:4px}
+#diffBtns{display:flex;gap:8px;margin-bottom:18px}
+.diffBtn{background:#131e29;border:1px solid #24333f;color:var(--dim);padding:6px 20px;cursor:pointer;font-size:13px;letter-spacing:2px}
+.diffBtn.sel{border-color:var(--red);color:var(--white);background:#2a1a20}
+#gearBtn{position:absolute;top:18px;right:24px;font-size:14px;color:var(--dim);cursor:pointer;letter-spacing:2px;border:1px solid #24333f;padding:6px 16px;background:#131e29}
+#gearBtn:hover{color:var(--white);border-color:var(--teal)}
+#lockHint{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;background:rgba(5,10,15,.55);pointer-events:auto}
+#lockHint .enterBtn{font-size:20px;letter-spacing:6px;background:var(--panel);padding:16px 40px;border:1px solid var(--teal);cursor:pointer}
+#lockHint .setBtn{font-size:13px;letter-spacing:3px;background:var(--panel);padding:8px 22px;border:1px solid #24333f;color:var(--dim);cursor:pointer}
+#lockHint .setBtn:hover{color:var(--white)}
+#endScreen .big{font-size:64px;font-weight:900;letter-spacing:12px}
+#endScreen .win{color:var(--teal)} #endScreen .lose{color:var(--red)}
+#endScreen button{margin-top:30px;background:var(--red);border:0;color:#fff;font-size:16px;letter-spacing:4px;padding:12px 42px;cursor:pointer;font-weight:700}
+#helpTip{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--dim);letter-spacing:2px;background:var(--panel);padding:4px 14px}
+#flashOverlay{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:25}
+
+/* ---------- Settings ---------- */
+#settingsMenu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;background:rgba(10,17,24,.97);border:1px solid #24333f;z-index:40;padding:24px 30px;pointer-events:auto}
+#settingsMenu h1{font-size:20px;letter-spacing:5px;border-bottom:2px solid var(--teal);display:inline-block;padding-bottom:4px;margin-bottom:16px}
+.setRow{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.setRow label{width:90px;font-size:13px;color:var(--dim);letter-spacing:2px}
+.setRow input[type=range]{flex:1;accent-color:#39d0c9}
+.setRow .val{width:52px;text-align:right;font-size:13px;color:var(--gold)}
+.setBtns{display:flex;gap:6px;flex:1}
+.setBtns button{flex:1;background:#131e29;border:1px solid #24333f;color:var(--dim);padding:5px 0;cursor:pointer;font-size:12px}
+.setBtns button.sel{border-color:var(--teal);color:var(--white)}
+#skinRow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.skinItem{background:#131e29;border:1px solid #24333f;padding:8px;cursor:pointer;text-align:center;font-size:13px;letter-spacing:2px}
+.skinItem .sw{height:10px;margin-bottom:6px;border-radius:2px}
+.skinItem.sel{border-color:var(--gold)}
+#settingsClose{margin-top:16px;width:100%;background:var(--teal);border:0;color:#06222a;font-size:14px;letter-spacing:4px;padding:10px 0;cursor:pointer;font-weight:700}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div>
+      <div class="scorebox" id="scoreAlly">0</div>
+      <div class="alivedots" id="dotsAlly"></div>
+    </div>
+    <div>
+      <div id="clockbox">
+        <div id="roundLabel">回合 1</div>
+        <div id="clock">1:40</div>
+      </div>
+      <div id="sideTag">进攻方</div>
+    </div>
+    <div>
+      <div class="scorebox" id="scoreEnemy">0</div>
+      <div class="alivedots enemy" id="dotsEnemy"></div>
+    </div>
+  </div>
+  <div id="spikeTag" class="hidden">SPIKE 已安放</div>
+  <div id="minimapBox"><canvas id="minimap" width="230" height="230"></canvas></div>
+  <div id="teamBar"></div>
+  <div id="killfeed"></div>
+  <div id="hpBox">
+    <div id="hpRow"><div id="hpNum">100</div><div id="armorNum">0</div></div>
+    <div class="bar" id="hpBar"><i></i></div>
+    <div class="bar" id="armorBar"><i></i></div>
+  </div>
+  <div id="moneyBox">¥ 800</div>
+  <div id="ultBox">大招点数 <b id="ultPts">0/7</b></div>
+  <div id="ammoBox">
+    <div id="ammoNum">12 <span>/ 36</span></div>
+    <div id="weapName">CLASSIC</div>
+    <div id="slots"><div id="slot1">1 主武器</div><div id="slot2" class="on">2 副武器</div><div id="slot3">3 近战</div></div>
+  </div>
+  <div id="abilityBox"></div>
+  <div id="helpTip" class="hidden"></div>
+  <div id="center">
+    <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+    <div id="hitmarker"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+    <div id="interactTip" class="hidden"></div>
+    <div id="progWrap" class="hidden"><div id="progLabel"></div><div id="progBar"><i></i></div></div>
+    <div id="banner" class="hidden"><div id="bannerBig"></div><div id="bannerSub"></div></div>
+  </div>
+  <div id="vignette"></div>
+  <div id="scope" class="hidden"></div>
+</div>
+
+<div id="buyMenu" class="hidden">
+  <span id="buyClose">关闭 [B]</span>
+  <h1>购买阶段</h1><span id="buyMoney">¥ 800</span>
+  <div class="buyCols">
+    <div id="buyWeapons"></div>
+    <div id="buyRight"></div>
+  </div>
+</div>
+
+<div id="scoreboard" class="hidden">
+  <h2>计分板 — <span id="sbScore"></span></h2>
+  <table><thead><tr><th>特工</th><th>定位</th><th>K</th><th>D</th><th>金钱</th><th>武器</th></tr></thead>
+  <tbody id="sbBody"></tbody></table>
+</div>
+
+<div id="agentSelect" class="overlay">
+  <span id="gearBtn">⚙ 设置</span>
+  <h1>TACTICAL <span>PROTOCOL</span></h1>
+  <div class="sub">选择地图 · 难度 · 特工 — 5v5 炸弹模式 · 先赢 13 回合</div>
+  <div id="mapCards"></div>
+  <div id="diffBtns"></div>
+  <div id="agentCards"></div>
+  <div class="sub" style="margin-top:22px">WASD 移动 · Shift 静步 · Ctrl 蹲 · 左键开火 · 右键瞄准 · R 换弹 · B 购买 · C/Q/E 技能 · X 大招 · F 安放/拆除 · Tab 计分板</div>
+</div>
+
+<div id="lockHint" class="hidden">
+  <div class="enterBtn">点 击 进 入 战 场</div>
+  <div class="setBtn" id="lockSettings">⚙ 设 置</div>
+</div>
+
+<div id="settingsMenu" class="hidden">
+  <h1>设 置</h1>
+  <div class="setRow"><label>灵敏度</label><input type="range" id="setSens" min="0.2" max="3" step="0.05"><span class="val" id="setSensV"></span></div>
+  <div class="setRow"><label>视野 FOV</label><input type="range" id="setFov" min="60" max="100" step="1"><span class="val" id="setFovV"></span></div>
+  <div class="setRow"><label>音量</label><input type="range" id="setVol" min="0" max="1" step="0.05"><span class="val" id="setVolV"></span></div>
+  <div class="setRow"><label>阴影</label><div class="setBtns" id="setShadow"></div></div>
+  <div class="setRow"><label>渲染画质</label><div class="setBtns" id="setQuality"></div></div>
+  <div class="setRow"><label>AI 难度</label><div class="setBtns" id="setDiff"></div></div>
+  <div class="setRow" style="align-items:flex-start"><label style="padding-top:8px">武器皮肤</label><div style="flex:1"><div id="skinRow"></div></div></div>
+  <button id="settingsClose">保 存 并 关 闭</button>
+</div>
+
+<div id="flashOverlay"></div>
+
+<div id="endScreen" class="overlay hidden">
+  <div class="big" id="endTitle">胜利</div>
+  <div class="sub" id="endSub"></div>
+  <button onclick="location.reload()">再 来 一 局</button>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

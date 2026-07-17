@@ -1,0 +1,13 @@
+{
+  "name": "csgo",
+  "version": "1.0.0",
+  "description": "Web-based Valorant-like tactical shooter",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "validate": "node --input-type=module -e \"import {validateMaps} from './src/map.js'; console.log(JSON.stringify(validateMaps(),null,2))\""
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}
