@@ -946,22 +946,7 @@ export function pathClear(a,b, margin=.35){
 }
 
 function smoothPath(indices){
-  if(indices.length<3) return indices;
-  for(let pass=0;pass<3;pass++){
-    const out=[indices[0]];
-    let i=0;
-    while(i<indices.length-2){
-      if(pathClear(G.map.wps[indices[i]], G.map.wps[indices[i+2]], .35)){
-        i+=2;
-      } else {
-        out.push(indices[i+1]);
-        i++;
-      }
-    }
-    out.push(indices[indices.length-1]);
-    if(out.length===indices.length) break;
-    indices = out;
-  }
+  // 暂时关闭平滑，避免直线切过薄墙导致 BOT 撞墙卡死
   return indices;
 }
 
