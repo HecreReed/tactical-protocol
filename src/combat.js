@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=20';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=20';
-import { WIDE } from './config.js?v=20';
-import { WORLD } from './mapData.js?v=20';
+import { G } from './state.js?v=21';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=21';
+import { WIDE } from './config.js?v=21';
+import { WORLD } from './mapData.js?v=21';
+import { colQuery } from './map.js?v=21';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=20';
-import { sfx } from './audio.js?v=20';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=21';
+import { sfx } from './audio.js?v=21';
 
 let nextId = 1;
 
@@ -70,7 +71,7 @@ export function moveSpeed(ent){
 function collideAxis(ent, axis, r, h){
   const p = ent.pos;
   const step = ent.vel.y > 2 ? .2 : .35;  // 上升稍严防止穿箱，但不过分硬以免视角抖
-  const all = [G.colliders, G.dynColliders];
+  const all = [colQuery(p.x-r-1, p.z-r-1, p.x+r+1, p.z+r+1), G.dynColliders];
   for(const list of all) for(const b of list){
     if(p.y + h <= b.min.y + .08 || p.y + step >= b.max.y) continue;
     if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
@@ -86,7 +87,7 @@ function collideAxis(ent, axis, r, h){
 }
 // 站到 topY 上后头顶是否有足够空间（防止被吸到屋内箱顶后卡进屋顶）
 function headroomClear(p, r, h, topY){
-  const all = [G.colliders, G.dynColliders];
+  const all = [colQuery(p.x-r-1, p.z-r-1, p.x+r+1, p.z+r+1), G.dynColliders];
   for(const list of all) for(const b of list){
     if(b.min.y < topY + .1 || b.min.y >= topY + h) continue;
     if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
@@ -106,7 +107,7 @@ export function moveEntity(ent, dt){
   p.y += ent.vel.y * dt;
   const rising = ent.vel.y > 0;
   let floorY = 0;
-  const all = [G.colliders, G.dynColliders];
+  const all = [colQuery(p.x-r-1, p.z-r-1, p.x+r+1, p.z+r+1), G.dynColliders];
   for(const list of all) for(const b of list){
     if(p.x + r <= b.min.x || p.x - r >= b.max.x) continue;
     if(p.z + r <= b.min.z || p.z - r >= b.max.z) continue;
@@ -138,8 +139,16 @@ export function hitSpheres(ent){
 
 export function rayWalls(o, dir, maxD){
   let best = maxD;
-  for(const b of G.colliders){ const d = rayAABB(o,dir,b,best); if(d<best) best = d; }
   for(const b of G.dynColliders){ const d = rayAABB(o,dir,b,best); if(d<best) best = d; }
+  // 静态碰撞体：沿射线分段查询空间网格（长弹道也只访问路径附近的桶）
+  const CH = 14;
+  for(let t=0; t<maxD && t<best; t+=CH){
+    const t2 = Math.min(t+CH, maxD);
+    const x1=o.x+dir.x*t, z1=o.z+dir.z*t, x2=o.x+dir.x*t2, z2=o.z+dir.z*t2;
+    const list = colQuery(Math.min(x1,x2)-1, Math.min(z1,z2)-1, Math.max(x1,x2)+1, Math.max(z1,z2)+1);
+    for(const b of list){ const d = rayAABB(o,dir,b,best); if(d<best) best = d; }
+    if(best <= t2) break;
+  }
   return best;
 }
 
@@ -329,7 +338,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=20';
+import { AGENTS } from './config.js?v=21';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

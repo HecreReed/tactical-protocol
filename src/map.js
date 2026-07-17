@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=20";
-import { V3, rayAABB, dist2d } from "./utils.js?v=20";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=20";
+import { G } from "./state.js?v=21";
+import { V3, rayAABB, dist2d } from "./utils.js?v=21";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=21";
 const HALF = WORLD/2;   // 55
 const OLD_MAPS = [
   {
@@ -1082,7 +1082,9 @@ export function buildMap(scene, mapId){
 
   // 箱子（支持第 6 位参数 y0：放置在高台/桥面上）
   const ct0=crateTexture();
-  for(const[cx,cz,s,h,tone,y0]of md.crates){const base=y0||0;const m=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),new THREE.MeshStandardMaterial({map:tone?mt0:ct0,roughness:.85,metalness:tone?.25:0}));m.position.set(cx,base+h/2,cz);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push({min:V3(cx-s/2,base,cz-s/2),max:V3(cx+s/2,base+h,cz+s/2)});mmExtra.push({x1:cx-s/2,z1:cz-s/2,x2:cx+s/2,z2:cz+s/2,type:'crate'});}
+  const crateMatWood=new THREE.MeshStandardMaterial({map:ct0,roughness:.85,metalness:0});
+  const crateMatMetal=new THREE.MeshStandardMaterial({map:mt0,roughness:.85,metalness:.25});
+  for(const[cx,cz,s,h,tone,y0]of md.crates){const base=y0||0;const m=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),tone?crateMatMetal:crateMatWood);m.position.set(cx,base+h/2,cz);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push({min:V3(cx-s/2,base,cz-s/2),max:V3(cx+s/2,base+h,cz+s/2)});mmExtra.push({x1:cx-s/2,z1:cz-s/2,x2:cx+s/2,z2:cz+s/2,type:'crate'});}
 
   // 屋顶（可从下方穿行）：平板 + 屋脊 + 檐口发光条
   const roofMat=new THREE.MeshStandardMaterial({color:0x4a3f36,roughness:.9,metalness:.05});
@@ -1127,6 +1129,7 @@ export function buildMap(scene, mapId){
   }
 
   G.colliders = colliders;
+  G.colGrid = buildColliderGrid(colliders);
 
   // 自动生成网格导航图
   const nav = buildNav(md, colliders);
@@ -1187,7 +1190,8 @@ export function pathClear(a,b, margin=.45){
   const l2 = Math.hypot(dx,dz)||1;
   const px = -dz/l2*margin, pz = dx/l2*margin;
   const feet = Math.min(a.y,b.y) - 1.1;
-  for(const list of [G.colliders, G.dynColliders]){
+  const statics = colQuery(Math.min(a.x,b.x)-1, Math.min(a.z,b.z)-1, Math.max(a.x,b.x)+1, Math.max(a.z,b.z)+1);
+  for(const list of [statics, G.dynColliders]){
     for(const box of list){
       if(box.max.y < feet + .45) continue;         // 脚下楼层 / 可跨矮台阶
       if(box.min.y > feet + 1.8) continue;         // 高于头顶（桥面/屋顶下穿行）
@@ -1200,6 +1204,38 @@ export function pathClear(a,b, margin=.45){
     }
   }
   return true;
+}
+
+// ---- 运行时碰撞体空间网格：moveEntity / rayWalls / pathClear 加速 ----
+export function buildColliderGrid(colliders){
+  const BS = 6, BN = Math.ceil(WORLD/BS) + 2;
+  const map = new Map();
+  const key = (bx,bz)=> bx*1000+bz;
+  for(const b of colliders){
+    const x0=Math.max(0,Math.floor((b.min.x+HALF)/BS)), x1=Math.min(BN-1,Math.floor((b.max.x+HALF)/BS));
+    const z0=Math.max(0,Math.floor((b.min.z+HALF)/BS)), z1=Math.min(BN-1,Math.floor((b.max.z+HALF)/BS));
+    for(let bx=x0;bx<=x1;bx++) for(let bz=z0;bz<=z1;bz++){
+      const k=key(bx,bz);
+      if(!map.has(k)) map.set(k,[]);
+      map.get(k).push(b);
+    }
+  }
+  return { BS, BN, map, key };
+}
+let _qStamp = 0;
+const _qOut = [];
+export function colQuery(minx, minz, maxx, maxz){
+  const grid = G.colGrid;
+  _qOut.length = 0;
+  if(!grid){ for(const b of G.colliders) _qOut.push(b); return _qOut; }
+  _qStamp++;
+  const x0=Math.max(0,Math.floor((minx+HALF)/grid.BS)), x1=Math.min(grid.BN-1,Math.floor((maxx+HALF)/grid.BS));
+  const z0=Math.max(0,Math.floor((minz+HALF)/grid.BS)), z1=Math.min(grid.BN-1,Math.floor((maxz+HALF)/grid.BS));
+  for(let bx=x0;bx<=x1;bx++) for(let bz=z0;bz<=z1;bz++){
+    const arr = grid.map.get(grid.key(bx,bz)); if(!arr) continue;
+    for(const b of arr){ if(b.__q===_qStamp) continue; b.__q=_qStamp; _qOut.push(b); }
+  }
+  return _qOut;
 }
 
 // 把目标点吸附到最近导航节点所在楼层（使高台/桥面上的驻点获得正确高度）

@@ -1,10 +1,10 @@
-import { G } from './state.js?v=20';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=20';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=20';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=20';
-import { useAbility, botCast } from './abilities.js?v=20';
-import { removeDrop } from './effects.js?v=20';
-import { sfx } from './audio.js?v=20';
+import { G } from './state.js?v=21';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=21';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=21';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=21';
+import { useAbility, botCast } from './abilities.js?v=21';
+import { removeDrop } from './effects.js?v=21';
+import { sfx } from './audio.js?v=21';
 
 const THINK_DT = .12;
 
@@ -107,6 +107,8 @@ function setPath(bot, dest){
   }
   a.pathI = 0;
   a.repathT = G.now + 3.5;
+  a.wdBest = Infinity;       // 进度看门狗：最近的最好目标距离
+  a.wdAt = G.now;
 }
 
 function lookaheadTarget(bot, path, pathI){
@@ -159,6 +161,7 @@ function followPath(bot, dt, sprint=true){
     bot.yaw += angDiff(bot.yaw, aimY) * Math.min(1, dt*8);
     bot.pitch *= (1 - dt*4);
   }
+  bot.walking = a.state==='execute' && a.goal && dist2d(bot.pos, a.goal) < 15 && (G.match.strategy?.pace) !== 'rush';
   let spd = moveSpeed(bot) * (sprint?1:.55);
   // 离最终目标很近时减速
   if(a.pathI >= a.path.length-1 && a.goal){
@@ -276,6 +279,8 @@ function stuckCheck(bot, dt){
 // ---------- 交火 ----------
 function combatUpdate(bot, dt){
   const a = bot.ai;
+  a.wdAt = G.now;              // 战斗不算卡死
+  bot.walking = false;
   const t = a.target;
   const w = curWeapon(bot);
   const d = dist2d(bot.pos, t.pos);
@@ -1079,6 +1084,25 @@ function moveDirect(bot, goal, dt, sprint=true){
 function navUpdate(bot, dt){
   const a = bot.ai, m = G.match, sp = m.spike;
 
+  // 进度看门狗：像真人一样绝不长时间卡死——无进展就换路，再不行瞬移到最近路点
+  if(a.goal && a.path.length){
+    const gd = dist2d(bot.pos, a.goal);
+    if(gd > 2.4){
+      if(gd < (a.wdBest ?? Infinity) - .45){ a.wdBest = gd; a.wdAt = G.now; }
+      else if(G.now - (a.wdAt||G.now) > 6){
+        setPath(bot, a.goal);                          // 6 秒无进展：换一条路
+        a.wdAt = G.now;
+        a.wdKick = (a.wdKick||0) + 1;
+        if(a.wdKick >= 2){                              // 连续两次仍无进展：吸附到最近路点重走
+          const w = G.map.wps[nearestWp(bot.pos)];
+          bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1);
+          bot.vel.set(0,0,0);
+          a.wdKick = 0;
+        }
+      }
+    } else { a.wdBest = gd; a.wdAt = G.now; a.wdKick = 0; }
+  }
+
   if(a.state==='plant' && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, a.goal||bot.pos) < 4){
     bot.vel.x = 0; bot.vel.z = 0;
     G.hooks.plantTick?.(bot, dt);
@@ -1119,7 +1143,19 @@ function navUpdate(bot, dt){
       bot.yaw += angDiff(bot.yaw, ty)*Math.min(1,dt*5);
       bot.pitch *= (1-dt*3);
     }
-    bot.vel.x *= .6; bot.vel.z *= .6;
+    // 微走位：每隔几秒在驻点附近小幅挪动（像真人架枪时的小碎步）
+    if(a.hold){
+      if(!a.microT || G.now > a.microT){
+        a.microT = G.now + rand(4.5, 8.5);
+        a.microOff = V3(a.hold.x + rand(-1.5,1.5), a.hold.y, a.hold.z + rand(-1.5,1.5));
+      }
+      if(a.microOff && dist2d(bot.pos, a.microOff) > .45){
+        const mdx = a.microOff.x - bot.pos.x, mdz = a.microOff.z - bot.pos.z;
+        const ml = Math.hypot(mdx,mdz)||1;
+        const mspd = moveSpeed(bot) * .3;
+        bot.vel.x = mdx/ml*mspd; bot.vel.z = mdz/ml*mspd;
+      } else { bot.vel.x *= .6; bot.vel.z *= .6; }
+    } else { bot.vel.x *= .6; bot.vel.z *= .6; }
   }
   if(arrived && a.state==='fetch' && sp.state==='dropped' && dist2d(bot.pos, sp.pos)<1.4){
     G.hooks.pickSpike?.(bot);

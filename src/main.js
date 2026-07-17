@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=20';
-import { buildMap } from './map.js?v=20';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=20';
-import { initAudio } from './audio.js?v=20';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=20';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=20';
-import { updateBots } from './bots.js?v=20';
-import { startMatch, updateGame } from './game.js?v=20';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=20';
+import { G } from './state.js?v=21';
+import { buildMap } from './map.js?v=21';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=21';
+import { initAudio } from './audio.js?v=21';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=21';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=21';
+import { updateBots } from './bots.js?v=21';
+import { startMatch, updateGame } from './game.js?v=21';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=21';
 
 let started = false;
 let sun = null;
@@ -18,6 +18,7 @@ function initThree(){
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;   // 阴影半频更新（性能优化，视觉几乎无差）
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   document.getElementById('app').appendChild(renderer.domElement);
@@ -77,7 +78,7 @@ function applyGraphics(){
   const s = G.settings;
   if(sun){
     sun.castShadow = s.shadows !== 'off';
-    const size = s.shadows === 'high' ? 2048 : (s.shadows==='low'?1024:0);
+    const size = s.shadows === 'high' ? 1536 : (s.shadows==='low'?1024:0);
     if(size && sun.shadow.mapSize.x !== size){
       sun.shadow.mapSize.set(size, size);
       if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; }
@@ -113,7 +114,7 @@ function initPointerLock(){
   });
 }
 
-let last = performance.now();
+let last = performance.now(), frameNo = 0;
 function loop(){
   requestAnimationFrame(loop);
   const nowMs = performance.now();
@@ -122,6 +123,8 @@ function loop(){
   dt = Math.min(dt, .04);
   G.dt = dt;
   G.now = nowMs/1000;
+  frameNo++;
+  if((frameNo & 1) === 0) G.renderer.shadowMap.needsUpdate = true;
 
   if(started){
     updateGame(dt);
