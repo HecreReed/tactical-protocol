@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=14';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=14';
-import { SKINS } from './config.js?v=14';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=14';
-import { useAbility } from './abilities.js?v=14';
-import { tracer, spawnSmoke } from './effects.js?v=14';
-import { sfx } from './audio.js?v=14';
+import { G, sens } from './state.js?v=15';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=15';
+import { SKINS, AGENTS } from './config.js?v=15';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=15';
+import { useAbility, startCast, confirmCast, cancelCast } from './abilities.js?v=15';
+import { tracer, spawnSmoke } from './effects.js?v=15';
+import { sfx } from './audio.js?v=15';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -62,15 +62,21 @@ export function initPlayerInput(){
         return;
       }
     }
+    // 装备式施法中：换武器键收回技能；技能键切换/收回
+    if(G.castMode && G.castMode.ent === p){
+      if(e.code==='Digit1'||e.code==='Digit2'||e.code==='Digit3'||e.code==='KeyR'){
+        cancelCast();
+      }
+    }
     switch(e.code){
       case 'KeyR': startReload(p); break;
       case 'Digit1': switchSlot(p,'primary'); break;
       case 'Digit2': switchSlot(p,'secondary'); break;
       case 'Digit3': switchSlot(p,'knife'); break;
-      case 'KeyC': useAbility(p,'c'); break;
-      case 'KeyQ': useAbility(p,'q'); break;
-      case 'KeyE': useAbility(p,'e'); break;
-      case 'KeyX': if(useAbility(p,'x')) buildViewModel(); break;
+      case 'KeyC': startCast(p,'c'); break;
+      case 'KeyQ': startCast(p,'q'); break;
+      case 'KeyE': startCast(p,'e'); break;
+      case 'KeyX': if(G.castMode) cancelCast(); if(useAbility(p,'x')) buildViewModel(); break;
     }
   });
   window.addEventListener('keyup', e=>{
@@ -87,6 +93,46 @@ function cancelSmokeMode(){
   if(!G.smokeMode) return;
   if(G.smokeMode.ring) G.scene.remove(G.smokeMode.ring);
   G.smokeMode = null;
+}
+
+// ---------- 装备式施法瞄准指示环 ----------
+let castRing = null;
+function ensureCastRing(){
+  if(castRing) return castRing;
+  castRing = new THREE.Mesh(new THREE.RingGeometry(.8,1,28),
+    new THREE.MeshBasicMaterial({color:0x39d0c9, transparent:true, opacity:.85, side:THREE.DoubleSide, depthWrite:false}));
+  castRing.rotation.x = -Math.PI/2;
+  castRing.visible = false;
+  G.scene.add(castRing);
+  return castRing;
+}
+function hideCastRing(){ if(castRing) castRing.visible = false; }
+function updateCastRing(p, cm){
+  if(cm.kind !== 'aim'){ hideCastRing(); return; }
+  const ring = ensureCastRing();
+  const t = cm.def.type;
+  const dir = dirFromYawPitch(p.yaw, p.pitch);
+  const o = eyePos(p);
+  const hx = -Math.sin(p.yaw), hz = -Math.cos(p.yaw);
+  let pt, r = 1.2;
+  const ground = (maxD)=>{ const d = Math.min(rayWalls(o, dir, maxD), maxD); const v = o.clone().addScaledVector(dir, d); v.y = 0; return v; };
+  switch(t){
+    case 'quake':      pt = V3(p.pos.x+hx*7.5, 0, p.pos.z+hz*7.5); r = 3.2; break;
+    case 'wall':       pt = V3(p.pos.x+hx*4, 0, p.pos.z+hz*4); r = 2.6; break;
+    case 'firewall':   pt = V3(p.pos.x+hx*5, 0, p.pos.z+hz*5); r = 1.4; break;
+    case 'tripwire':   pt = ground(9); break;
+    case 'turret':     pt = V3(p.pos.x+hx*1.4, 0, p.pos.z+hz*1.4); r = .9; break;
+    case 'cage':       pt = ground(26); r = 3.4; break;
+    case 'toxicSmoke': pt = ground(40); r = 3.8; break;
+    case 'toxicWall':  pt = V3(p.pos.x+hx*6, 0, p.pos.z+hz*6); r = 1.4; break;
+    case 'shadowStep': { const d = Math.min(rayWalls(o, dir, 9), 9)*.9; pt = o.clone().addScaledVector(dir, d); pt.y = 0; break; }
+    case 'paranoia': case 'wallFlash': case 'stunWave':
+      pt = V3(p.pos.x+hx*6, 0, p.pos.z+hz*6); r = 1.6; break;
+    default: pt = ground(25); break;
+  }
+  ring.scale.setScalar(r);
+  ring.position.set(pt.x, .1, pt.z);
+  ring.visible = true;
 }
 
 export function switchSlot(p, slot){
@@ -133,7 +179,17 @@ export function buildViewModel(){
     emissive: sk.glow, emissiveIntensity: sk.glow ? .55 : 0,
   });
   skinMats = { body: dark, accent };
-  if(p.rocketUlt > 0){
+  if(G.castMode && G.castMode.ent === p){
+    // 手持技能（装备式施法）：发光法球 + 握持手
+    const col = AGENTS[p.agent]?.color ?? 0x39d0c9;
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(.055,12,10),
+      new THREE.MeshStandardMaterial({color:col, emissive:col, emissiveIntensity:.7, roughness:.35}));
+    orb.position.set(0,-.01,-.18);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(.055,.05,.11), dark);
+    hand.position.set(0,-.075,-.1);
+    hand.rotation.x = .35;
+    g.add(orb, hand);
+  } else if(p.rocketUlt > 0){
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(.055,.06,.62,10), dark);
     tube.rotation.x = Math.PI/2; tube.position.z = -.3;
     const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(.07,.075,.1,10), accent);
@@ -183,7 +239,7 @@ export function updatePlayer(dt){
 
   p.crouch = !!G.keys['ControlLeft'] || !!G.keys['KeyZ'];
   p.walking = !!G.keys['ShiftLeft'];
-  p.ads = G.mouse.rmb && curWeapon(p).def.cat!=='melee' && p.knifeUlt<=0;
+  p.ads = !G.castMode && G.mouse.rmb && curWeapon(p).def.cat!=='melee' && p.knifeUlt<=0;
 
   // movement intent
   let fx = 0, fz = 0;
@@ -221,7 +277,28 @@ export function updatePlayer(dt){
   const w = curWeapon(p);
   if(w.reloadEnd && G.now >= w.reloadEnd){ finishReload(w); w.reloadEnd = 0; }
 
-  const canShoot = (phase==='live'||phase==='planted') && !p.channel && G.now > P.equipUntil && !G.buyOpen && G.locked;
+  // 装备式施法（拿在手上）：左键释放 / 右键低抛或收回
+  if(G.castMode && G.castMode.ent === p){
+    const cm = G.castMode;
+    const phOk = phase==='live' || phase==='planted';
+    if(!phOk || G.now > cm.until || !p.alive){
+      cancelCast(); hideCastRing();
+    } else {
+      updateCastRing(p, cm);
+      if(G.locked && G.mouse.lmb){
+        G.mouse.lmb = false;
+        hideCastRing();
+        confirmCast(false);
+      } else if(G.locked && G.mouse.rmb){
+        G.mouse.rmb = false;
+        hideCastRing();
+        if(cm.kind==='throw') confirmCast(true);
+        else cancelCast();
+      }
+    }
+  } else hideCastRing();
+
+  const canShoot = (phase==='live'||phase==='planted') && !p.channel && G.now > P.equipUntil && !G.buyOpen && G.locked && !G.castMode;
   if(canShoot && G.mouse.lmb){
     if(p.knifeUlt > 0){
       if(G.now >= w.nextFire){
@@ -332,8 +409,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=14';
-import { raySphere } from './utils.js?v=14';
+import { hitSpheres } from './combat.js?v=15';
+import { raySphere } from './utils.js?v=15';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

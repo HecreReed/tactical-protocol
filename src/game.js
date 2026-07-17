@@ -1,19 +1,19 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=14';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=14';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=14';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=14';
-import { initAbilities, roundRefill } from './abilities.js?v=14';
-import { initBotAI, resetBotRound } from './bots.js?v=14';
-import { inSite } from './map.js?v=14';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers } from './effects.js?v=14';
-import { buildViewModel, switchSlot } from './player.js?v=14';
-import { sfx } from './audio.js?v=14';
+import { G } from './state.js?v=15';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=15';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=15';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=15';
+import { initAbilities, roundRefill } from './abilities.js?v=15';
+import { initBotAI, resetBotRound } from './bots.js?v=15';
+import { inSite } from './map.js?v=15';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=15';
+import { buildViewModel, switchSlot } from './player.js?v=15';
+import { sfx } from './audio.js?v=15';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];
 
-let spikeMesh = null, nextBeep = 0;
+let spikeMesh = null, nextBeep = 0, pickupGate = 0;
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
@@ -106,6 +106,7 @@ export function startRound(){
   G.projectiles.length = 0;
   if(G.smokeMode?.ring) G.scene.remove(G.smokeMode.ring);
   G.smokeMode = null;
+  G.castMode = null;
   addBarriers();
 
   // spike reset
@@ -350,6 +351,30 @@ function playerInteract(p, dt){
 
   // auto pickup dropped spike
   if(side==='atk' && m.spike.state==='dropped' && dist2d(p.pos, m.spike.pos) < 1.4) pickSpike(p);
+
+  // 拾取掉落武器（复刻无畏契约：走近按 F 换枪）
+  if(!tip && !p.channel && (m.phase==='live'||m.phase==='planted'||m.phase==='buy')){
+    let nd = null, dd = 1.8;
+    for(const d of G.drops){
+      const dist = dist2d(p.pos, d.pos);
+      if(dist < dd && Math.abs(p.pos.y - d.pos.y) < 1.6){ dd = dist; nd = d; }
+    }
+    if(nd){
+      tip = `按 [F] 拾取 ${nd.w.def.name}（${nd.w.ammo}/${nd.w.reserve}）`;
+      if(holding && G.now > pickupGate){
+        pickupGate = G.now + .6;
+        const slot = nd.w.def.cat==='pistol' ? 'secondary' : 'primary';
+        const old = p.weapons[slot];
+        if(old && old.def.cost > 0 && old.id !== 'classic') spawnDrop(old, p.pos.clone());
+        p.weapons[slot] = nd.w;
+        removeDrop(nd);
+        p.slot = slot;
+        buildViewModel();
+        sfx.buy();
+        G.hooks.hudMsg?.(`拾取了 ${nd.w.def.name}`);
+      }
+    }
+  }
 
   G.hooks.interactTip?.(tip, p.channel, p.channel==='plant' ? m.spike.prog/4 : m.spike.defProg/7);
 }

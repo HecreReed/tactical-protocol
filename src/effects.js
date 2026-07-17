@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=14';
-import { V3 } from './utils.js?v=14';
-import { sfx } from './audio.js?v=14';
+import { G } from './state.js?v=15';
+import { V3 } from './utils.js?v=15';
+import { sfx } from './audio.js?v=15';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -145,6 +145,32 @@ export function spawnTrap(pos, yaw, ent){
   return tr;
 }
 
+// ---- 掉落武器 ----
+export function spawnDrop(weapon, pos){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(.09,.09,.72),
+    new THREE.MeshStandardMaterial({color:0x2c3640, roughness:.55, metalness:.35}));
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(.06,.16,.13),
+    new THREE.MeshStandardMaterial({color:0x1e262e, roughness:.7}));
+  mag.position.set(0,-.05,.08);
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(.11,.02,.2),
+    new THREE.MeshBasicMaterial({color:0xf5c56b, transparent:true, opacity:.9}));
+  glow.position.set(0,.06,-.15);
+  g.add(body, mag, glow);
+  g.position.set(pos.x, .12, pos.z);
+  g.rotation.y = Math.random()*Math.PI*2;
+  g.rotation.z = .12;
+  scene.add(g);
+  const d = { w: weapon, pos: V3(pos.x, pos.y||0, pos.z), mesh: g };
+  G.drops.push(d);
+  return d;
+}
+export function removeDrop(d){
+  scene.remove(d.mesh);
+  const i = G.drops.indexOf(d);
+  if(i>=0) G.drops.splice(i,1);
+}
+
 export function suppressFX(p){
   const f = getFlash(0xb478ff, .5);
   f.mesh.position.copy(p).y += 1;
@@ -272,6 +298,8 @@ export function clearRoundFX(){
   G.turrets.length = 0;
   for(const t of G.traps) if(t.mesh) scene.remove(t.mesh);
   G.traps.length = 0;
+  for(const d of G.drops) if(d.mesh) scene.remove(d.mesh);
+  G.drops.length = 0;
 }
 export function removeMesh(m){ if(m) scene.remove(m); }
 export function addMesh(m){ scene.add(m); }

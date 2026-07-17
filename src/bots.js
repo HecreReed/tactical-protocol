@@ -1,9 +1,10 @@
-import { G } from './state.js?v=14';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=14';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=14';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=14';
-import { useAbility, botCast } from './abilities.js?v=14';
-import { sfx } from './audio.js?v=14';
+import { G } from './state.js?v=15';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=15';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=15';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=15';
+import { useAbility, botCast } from './abilities.js?v=15';
+import { removeDrop } from './effects.js?v=15';
+import { sfx } from './audio.js?v=15';
 
 const THINK_DT = .12;
 
@@ -31,6 +32,7 @@ export function resetBotRound(ent){
   a.stuckT = 0; a.sideUntil = 0; a.state = 'wait'; a.stageAt = 0;
   a.fellBack = false; a.fallbackUntil = 0;
   a.repositioned = false; a.introtGate = 0;
+  a.lootDrop = null;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -38,6 +40,37 @@ export function resetBotRound(ent){
 
 const sideOf = ent => ent.team === 'ally' ? G.match.allySide : (G.match.allySide==='atk'?'def':'atk');
 const D = ()=> G.match.diff; // 0.55 - 1.25
+
+// ---------- 武器维护（像人一样管理弹药） ----------
+function totalRangedAmmo(bot){
+  let t = 0;
+  for(const k of ['primary','secondary']){
+    const w = bot.weapons[k];
+    if(w) t += w.ammo + w.reserve;
+  }
+  return t;
+}
+function weaponUpkeep(bot){
+  // 换弹完成结算（无论是否在战斗中）
+  for(const k of ['primary','secondary']){
+    const w = bot.weapons[k];
+    if(w && w.reloadEnd && G.now >= w.reloadEnd){
+      const need = w.def.mag - w.ammo, take = Math.min(need, w.reserve);
+      w.ammo += take; w.reserve -= take; w.reloadEnd = 0;
+    }
+  }
+  const a = bot.ai;
+  if(a.target) return;
+  // 空闲时机装填：脱战 1.6s 且弹匣不满
+  const w = curWeapon(bot);
+  if(w.def.cat!=='melee' && !w.reloadEnd && w.reserve>0 && w.ammo < w.def.mag*.55 && G.now - bot.lastShotAt > 1.6){
+    w.reloadEnd = G.now + w.def.rl;
+  }
+  // 有弹药的更强武器优先：切回主武器 / 副武器
+  const pri = bot.weapons.primary, sec = bot.weapons.secondary;
+  if(bot.slot!=='primary' && pri && (pri.ammo>0 || pri.reserve>0)) bot.slot = 'primary';
+  else if(bot.slot==='knife' && sec && (sec.ammo>0 || sec.reserve>0)) bot.slot = 'secondary';
+}
 
 // ---------- 感知 ----------
 function findTarget(bot){
@@ -67,7 +100,11 @@ function setPath(bot, dest){
   const a = bot.ai;
   const raw = findPath(bot.pos, dest, 0.35);  // slight randomness for varied bot routes
   a.path = raw.length ? raw : [];
-  if(raw.length) a.path.push(dest.clone ? dest.clone() : V3(dest.x,0,dest.z));
+  if(raw.length){
+    const dc = dest.clone ? dest.clone() : V3(dest.x,0,dest.z);
+    dc.y = raw[raw.length-1].y;   // 终点与路径末端同层（路点 y 语义），保证 lookahead/推进判定正确
+    a.path.push(dc);
+  }
   a.pathI = 0;
   a.repathT = G.now + 2.5;
 }
@@ -237,6 +274,26 @@ function combatUpdate(bot, dt){
   const d = dist2d(bot.pos, t.pos);
   const blinded = G.now < (bot.flashUntil||0);
 
+  // 拼刀：没有任何子弹时持刀直冲目标
+  if(w.def.cat==='melee' && bot.knifeUlt<=0){
+    const ty0 = yawTo(bot.pos, t.pos);
+    bot.yaw += angDiff(bot.yaw, ty0) * Math.min(1, dt*10);
+    bot.pitch += (pitchTo(eyePos(bot), eyePos(t)) - bot.pitch) * Math.min(1, dt*10);
+    const spd = moveSpeed(bot);
+    const dx0 = t.pos.x - bot.pos.x, dz0 = t.pos.z - bot.pos.z, l0 = Math.hypot(dx0,dz0)||1;
+    // 蛇皮走位逼近
+    a.strafeT -= dt;
+    if(a.strafeT<=0){ a.strafeT = rand(.25,.5); a.strafeDir = Math.random()<.5?-1:1; }
+    const px0 = Math.cos(bot.yaw), pz0 = -Math.sin(bot.yaw);
+    bot.vel.x = (dx0/l0 + px0*a.strafeDir*.4)*spd;
+    bot.vel.z = (dz0/l0 + pz0*a.strafeDir*.4)*spd;
+    if(d < 2.1 && G.now >= w.nextFire){
+      w.nextFire = G.now + .75;
+      meleeAttack(bot, Math.random()<.3);
+    }
+    return;
+  }
+
   if(blinded){
     a.strafeT -= dt;
     if(a.strafeT<=0){ a.strafeT=rand(.3,.6); a.strafeDir = Math.random()<.5?-1:1; }
@@ -312,8 +369,12 @@ function combatUpdate(bot, dt){
   } else { bot.vel.x *= .5; bot.vel.z *= .5; }
 
   if(w.def.cat!=='melee' && w.ammo<=0 && !w.reloadEnd){
-    if(w.reserve>0){ w.reloadEnd = G.now + w.def.rl; }
-    else if(bot.weapons.secondary && bot.slot!=='secondary'){ bot.slot='secondary'; }
+    const sec = bot.weapons.secondary;
+    // 敌人近：快速切副武器保命，而不是站着换弹
+    if(d < 22 && bot.slot==='primary' && sec && sec.ammo>0){ bot.slot='secondary'; }
+    else if(w.reserve>0){ w.reloadEnd = G.now + w.def.rl; }
+    else if(bot.slot!=='secondary' && sec && (sec.ammo>0 || sec.reserve>0)){ bot.slot='secondary'; }
+    else { bot.slot='knife'; }   // 全空：拔刀拼命
   }
 
   if(G.now < a.reactAt || w.reloadEnd) return;
@@ -656,6 +717,8 @@ export function updateBots(dt){
       continue;
     }
 
+    weaponUpkeep(bot);
+
     a.nextThink -= dt;
     if(a.nextThink <= 0){
       a.nextThink = THINK_DT;
@@ -702,6 +765,28 @@ function think(bot){
 
   botAbilities(bot);
   if(a.target) return;
+
+  // 弹药耗尽：优先去捡战场掉落的武器（角色死亡会掉枪）
+  if(totalRangedAmmo(bot) <= 0 && G.drops.length){
+    let best = null, bd = 50;
+    for(const d of G.drops){
+      if(d.w.ammo + d.w.reserve <= 0) continue;
+      const dist = dist2d(bot.pos, d.pos);
+      if(dist < bd){ bd = dist; best = d; }
+    }
+    if(best){
+      a.state = 'loot';
+      a.lootDrop = best;
+      a.goal = best.pos.clone();
+      if(needRepath(bot, a.goal)) setPath(bot, a.goal);
+      return;
+    }
+  }
+  if(a.state==='loot'){
+    // 目标掉落物没了/捡到了 → 回到正常思考
+    if(!a.lootDrop || !G.drops.includes(a.lootDrop) || totalRangedAmmo(bot) > 0){ a.state='wait'; a.lootDrop=null; }
+    else return;   // 继续赶路捡枪
+  }
 
   const side = sideOf(bot);
   if(side==='atk') thinkAttack(bot);
@@ -1000,4 +1085,25 @@ function navUpdate(bot, dt){
   if(arrived && a.state==='fetch' && sp.state==='dropped' && dist2d(bot.pos, sp.pos)<1.4){
     G.hooks.pickSpike?.(bot);
   }
+  // 捡枪：到达目标掉落物
+  if(a.state==='loot' && a.lootDrop && G.drops.includes(a.lootDrop) && dist2d(bot.pos, a.lootDrop.pos) < 1.5){
+    botPickupDrop(bot, a.lootDrop);
+    a.lootDrop = null;
+    a.state = 'wait';
+  }
+  // 顺路捡：没有主武器时路过掉落的主武器直接捡
+  if(!bot.weapons.primary && G.drops.length && !a.target){
+    for(const d of G.drops){
+      if(d.w.def.cat==='pistol') continue;
+      if(dist2d(bot.pos, d.pos) < 1.4 && Math.abs(bot.pos.y - d.pos.y) < 1.6){ botPickupDrop(bot, d); break; }
+    }
+  }
+}
+
+function botPickupDrop(bot, d){
+  const slot = d.w.def.cat==='pistol' ? 'secondary' : 'primary';
+  bot.weapons[slot] = d.w;
+  bot.slot = slot;
+  removeDrop(d);
+  if(G.player && dist2d(bot.pos, G.player.pos) < 30) sfx.equip();
 }

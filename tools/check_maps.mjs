@@ -1,8 +1,8 @@
 // 地图完整性验证：基于真实导航图（含高低差双层导航）
 // live: 进攻方可达所有包点/集结点/驻守位/hold（含高台）
 // buy : 光幕作为“边阻断”注入——防守方可达包点+驻守位；到不了进攻出生/中立集结；进攻方到不了包点
-import { MAPS } from '../src/mapData.js?v=14';
-import { buildColliders, buildNav } from '../src/map.js?v=14';
+import { MAPS } from '../src/mapData.js?v=15';
+import { buildColliders, buildNav } from '../src/map.js?v=15';
 
 function segX(ax,az,bx,bz,r){ // 2D 线段 vs 矩形 (Liang-Barsky)
   const dx=bx-ax, dz=bz-az;

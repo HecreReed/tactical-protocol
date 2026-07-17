@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=14';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=14';
-import { AGENTS } from './config.js?v=14';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=14';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=14';
-import { inAnyOpen } from './map.js?v=14';
-import { sfx } from './audio.js?v=14';
-import { raySphere } from './utils.js?v=14';
+import { G } from './state.js?v=15';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=15';
+import { AGENTS } from './config.js?v=15';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=15';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=15';
+import { inAnyOpen } from './map.js?v=15';
+import { sfx } from './audio.js?v=15';
+import { raySphere } from './utils.js?v=15';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -252,26 +252,89 @@ export function updateDeployables(dt){
 }
 
 // ============ 主动使用（玩家/AI 自身向技能） ============
-export function useAbility(ent, key){
-  if(!ent.alive || ent.channel) return false;
+function gateAbility(ent, key){
+  if(!ent.alive || ent.channel) return null;
   const ph = G.match?.phase;
-  if(ph !== 'live' && ph !== 'planted') return false;
+  if(ph !== 'live' && ph !== 'planted') return null;
   if(G.now < (ent.suppressedUntil||0)){
     if(ent.isPlayer){ sfx.deny(); G.hooks.hudMsg?.('技能被压制中！'); }
-    return false;
+    return null;
   }
   const slot = ent.ab[key];
-  if(!slot) return false;
+  if(!slot) return null;
   const def = slot.def;
   const agent = AGENTS[ent.agent];
-
   if(key==='x'){
-    if(ent.ult < agent.ultCost) { if(ent.isPlayer) sfx.deny(); return false; }
+    if(ent.ult < agent.ultCost) { if(ent.isPlayer) sfx.deny(); return null; }
   } else {
-    if(slot.n <= 0) { if(ent.isPlayer) sfx.deny(); return false; }
-    if(key==='e' && G.now < ent.abCd.e) { if(ent.isPlayer) sfx.deny(); return false; }
+    if(slot.n <= 0) { if(ent.isPlayer) sfx.deny(); return null; }
+    if(key==='e' && G.now < ent.abCd.e) { if(ent.isPlayer) sfx.deny(); return null; }
   }
+  return { slot, def };
+}
 
+function finishAbility(ent, key, slot, used){
+  if(used){
+    if(key==='x') ent.ult = 0;
+    else slot.n--;
+  }
+  return used;
+}
+
+export function useAbility(ent, key){
+  const g = gateAbility(ent, key);
+  if(!g) return false;
+  return finishAbility(ent, key, g.slot, performAbility(ent, key, g.slot, g.def, {}));
+}
+
+// ===== 装备式施法（复刻无畏契约：按技能键持在手上，左键释放/右键低抛或取消） =====
+const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade']);
+const EQUIP_AIM = new Set(['wall','firewall','quake','paranoia','wallFlash','stunWave','shadowStep','tripwire','turret','cage','toxicSmoke','toxicWall']);
+
+export function startCast(ent, key){
+  if(G.castMode){
+    const same = G.castMode.key === key;
+    cancelCast();
+    if(same) return false;
+  }
+  const g = gateAbility(ent, key);
+  if(!g) return false;
+  const t = g.def.type;
+  if(ent.isPlayer && (EQUIP_THROW.has(t) || EQUIP_AIM.has(t))){
+    G.castMode = { ent, key, def: g.def, slot: g.slot, kind: EQUIP_THROW.has(t)?'throw':'aim', until: G.now + 10 };
+    sfx.equip();
+    G.hooks.hudMsg?.(EQUIP_THROW.has(t)
+      ? `已手持「${g.def.name}」— 左键 投掷 · 右键 低抛 · 再按 ${key.toUpperCase()} 收回`
+      : `瞄准「${g.def.name}」— 左键 释放 · 右键 收回`);
+    G.hooks.rebuildViewModel?.();
+    return true;
+  }
+  return finishAbility(ent, key, g.slot, performAbility(ent, key, g.slot, g.def, {}));
+}
+
+export function confirmCast(alt=false){
+  const cm = G.castMode;
+  if(!cm) return false;
+  G.castMode = null;
+  const { ent, key, def, slot } = cm;
+  if(!ent.alive){ G.hooks.rebuildViewModel?.(); return false; }
+  const ph = G.match?.phase;
+  if(ph !== 'live' && ph !== 'planted'){ G.hooks.rebuildViewModel?.(); return false; }
+  const used = finishAbility(ent, key, slot, performAbility(ent, key, slot, def, { alt }));
+  G.hooks.rebuildViewModel?.();
+  G.hooks.refreshBuy?.();
+  return used;
+}
+
+export function cancelCast(){
+  if(!G.castMode) return;
+  G.castMode = null;
+  sfx.equip();
+  G.hooks.rebuildViewModel?.();
+}
+
+// 实际执行技能效果（opts.alt = 低抛变体）
+export function performAbility(ent, key, slot, def, opts={}){
   let used = true;
   switch(def.type){
     case 'dash': {
@@ -286,7 +349,7 @@ export function useAbility(ent, key){
     case 'updraft':
       ent.vel.y = 11; ent.grounded = false; sfx.dash(); break;
     case 'smokeProj':
-      throwProj(ent, 'smoke', 15, 3); sfx.ability(); break;
+      throwProj(ent, 'smoke', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
     case 'smokeSky': {
       if(ent.isPlayer && ent.agent==='tianqiong'){
         // 天穹（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
@@ -310,7 +373,7 @@ export function useAbility(ent, key){
       break;
     }
     case 'molly':
-      throwProj(ent, 'molly', 17, 4); sfx.ability(); break;
+      throwProj(ent, 'molly', opts.alt?7:17, opts.alt?2.2:4); sfx.ability(); break;
     case 'stim':
       ent.stimUntil = G.now + 12; sfx.ability(); break;
     case 'orbital': {
@@ -325,7 +388,7 @@ export function useAbility(ent, key){
       break;
     }
     case 'slowProj':
-      throwProj(ent, 'slow', 15, 3.5); sfx.ability(); break;
+      throwProj(ent, 'slow', opts.alt?7:15, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'heal': {
       let target = ent;
       const dir = dirFromYawPitch(ent.yaw, ent.pitch);
@@ -369,7 +432,7 @@ export function useAbility(ent, key){
       break;
     // ---- 新技能 ----
     case 'flash':
-      throwProj(ent, 'flash', 19, 3); sfx.ability(); break;
+      throwProj(ent, 'flash', opts.alt?8:19, opts.alt?2:3); sfx.ability(); break;
     case 'firewall':
       fireWall(ent); break;
     case 'selfheal':
@@ -394,9 +457,9 @@ export function useAbility(ent, key){
       if(!shadowStep(ent, 40, true)){ used=false; if(ent.isPlayer) sfx.deny(); break; }
       break;
     case 'recon':
-      throwProj(ent, 'recon', 24, 2); sfx.ability(); break;
+      throwProj(ent, 'recon', opts.alt?9:24, opts.alt?2:2); sfx.ability(); break;
     case 'shock':
-      throwProj(ent, 'shock', 20, 3); sfx.ability(); break;
+      throwProj(ent, 'shock', opts.alt?8:20, opts.alt?2.2:3); sfx.ability(); break;
     case 'pulse':
       revealArea(ent.pos.clone(), 22, 2.5, ent.team);
       ent.abCd.e = G.now + def.cd;
@@ -407,9 +470,9 @@ export function useAbility(ent, key){
       break;
     // ---- 雷奕 ----
     case 'nade':
-      throwProj(ent, 'nade', 17, 3.5); sfx.ability(); break;
+      throwProj(ent, 'nade', opts.alt?7:17, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'bignade':
-      throwProj(ent, 'bignade', 16, 4); sfx.ability(); break;
+      throwProj(ent, 'bignade', opts.alt?7:16, opts.alt?2.4:4); sfx.ability(); break;
     case 'blastjump': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       ent.vel.x = dir.x*8; ent.vel.z = dir.z*8; ent.vel.y = 7.2;
@@ -497,7 +560,7 @@ export function useAbility(ent, key){
       break;
     }
     case 'acidPool':
-      throwProj(ent, 'acid', 15, 3); sfx.ability(); break;
+      throwProj(ent, 'acid', opts.alt?7:15, opts.alt?2.2:3); sfx.ability(); break;
     case 'toxicWall': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       for(let i=0;i<7;i++){
@@ -516,20 +579,15 @@ export function useAbility(ent, key){
     }
     // ---- 零式 ----
     case 'suppressNade':
-      throwProj(ent, 'suppress', 16, 3); sfx.ability(); break;
+      throwProj(ent, 'suppress', opts.alt?7:16, opts.alt?2.2:3); sfx.ability(); break;
     case 'fragNade':
-      throwProj(ent, 'frag', 17, 3.5); sfx.ability(); break;
+      throwProj(ent, 'frag', opts.alt?7:17, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'nullPulse': {
       popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
       ent.stimUntil = G.now + 8;
       sfx.ultReady();
       break;
     }
-  }
-
-  if(used){
-    if(key==='x') ent.ult = 0;
-    else slot.n--;
   }
   return used;
 }
@@ -704,7 +762,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=14').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=15').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

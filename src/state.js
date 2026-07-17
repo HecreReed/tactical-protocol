@@ -10,6 +10,8 @@ export const G = {
   zones: [],          // {type,pos,r,until,dps,owner}
   turrets: [],        // 哨戒炮 {pos,yaw,team,owner,hp,nextFire,mesh,until}
   traps: [],          // 绊网 {pos,team,owner,mesh,until}
+  drops: [],          // 掉落武器 {w,pos,mesh}
+  castMode: null,     // 装备式施法 {ent,key,def,slot,kind,until}
   corpses: [],
   projectiles: [],
   map: null,

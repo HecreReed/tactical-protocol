@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=14';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=14';
-import { WIDE } from './config.js?v=14';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=14';
-import { sfx } from './audio.js?v=14';
+import { G } from './state.js?v=15';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=15';
+import { WIDE } from './config.js?v=15';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=15';
+import { sfx } from './audio.js?v=15';
 
 let nextId = 1;
 
@@ -190,6 +190,14 @@ export function killEnt(target, killer, weaponName, part){
     if(killer.knifeUlt > 0) killer.knifeUlt = 5;
     if(killer.isPlayer){ sfx.kill(); G.hooks.hitmarker?.(part==='h', true); }
   }
+  // 掉落武器：主武器优先，其次非初始手枪
+  const dropW = target.weapons.primary ||
+    (target.weapons.secondary && target.weapons.secondary.id!=='classic' ? target.weapons.secondary : null);
+  if(dropW){
+    if(target.weapons.primary === dropW) target.weapons.primary = null;
+    else target.weapons.secondary = makeWeapon('classic');
+    spawnDrop(dropW, target.pos.clone());
+  }
   // corpse
   if(target.mesh){
     target.mesh.rotation.x = -Math.PI/2;
@@ -295,7 +303,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=14';
+import { AGENTS } from './config.js?v=15';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
