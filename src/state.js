@@ -8,6 +8,8 @@ export const G = {
   dynColliders: [],   // sage walls / barriers {min,max,until?,mesh}
   smokes: [],         // {pos,r,until,mesh}
   zones: [],          // {type,pos,r,until,dps,owner}
+  turrets: [],        // 哨戒炮 {pos,yaw,team,owner,hp,nextFire,mesh,until}
+  traps: [],          // 绊网 {pos,team,owner,mesh,until}
   corpses: [],
   projectiles: [],
   map: null,

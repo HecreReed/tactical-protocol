@@ -65,7 +65,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #abilityBox{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px}
 .ab{width:58px;height:58px;background:var(--panel);border:1px solid #2b3b47;position:relative;display:flex;align-items:center;justify-content:center}
 .ab.empty{opacity:.35}
-.ab .ic{font-size:24px}
+.ab .ic{font-size:24px;display:flex}
+.ab .ic svg{width:27px;height:27px;color:var(--white)}
+.ab.ult .ic svg{color:var(--gold)}
+.ab.ready .ic svg{color:var(--teal)}
 .ab .key{position:absolute;left:4px;top:2px;font-size:10px;color:var(--dim)}
 .ab .n{position:absolute;right:4px;bottom:2px;font-size:12px;font-weight:700;color:var(--gold)}
 .ab.ult{border-color:var(--gold)}
@@ -117,7 +120,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .bitem .pr{font-size:12px;color:var(--gold)}
 .bitem.owned{border-color:var(--teal)}
 .bitem.owned::after{content:"已装备";position:absolute;right:6px;top:6px;font-size:10px;color:var(--teal)}
+.bitem.sellable::after{content:"已装备 · 右键出售";color:var(--gold)}
 .bitem.noafford{opacity:.4;cursor:not-allowed}
+.abitem .nm svg{width:15px;height:15px;vertical-align:-3px;margin-right:4px;color:var(--teal)}
 #buyClose{position:absolute;right:18px;top:14px;font-size:13px;color:var(--dim);cursor:pointer;letter-spacing:2px}
 #buyClose:hover{color:var(--white)}
 
@@ -136,16 +141,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .overlay h1{font-size:34px;letter-spacing:10px;font-weight:900}
 .overlay h1 span{color:var(--red)}
 .overlay .sub{color:var(--dim);letter-spacing:3px;font-size:13px;margin:8px 0 18px}
-#agentCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:1000px}
-.agentCard{width:150px;background:#131e29;border:1px solid #24333f;padding:14px 12px;cursor:pointer;transition:.15s;text-align:center}
+#agentCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:1080px}
+.agentCard{width:158px;background:#131e29;border:1px solid #24333f;padding:14px 12px;cursor:pointer;transition:.15s;text-align:center}
 .agentCard:hover{border-color:var(--red);transform:translateY(-6px)}
-.agentCard .icon{font-size:38px;margin-bottom:4px}
+.agentCard .icon{font-size:34px;margin-bottom:4px}
 .agentCard h2{font-size:18px;letter-spacing:3px}
-.agentCard .role{color:var(--gold);font-size:11px;letter-spacing:2px;margin:2px 0 8px}
-.agentCard ul{list-style:none;text-align:left;font-size:11px;color:var(--dim);line-height:1.8}
-.agentCard ul b{color:var(--white)}
-#mapCards{display:flex;gap:12px;margin-bottom:16px}
-.mapCard{width:170px;background:#131e29;border:1px solid #24333f;padding:12px 14px;cursor:pointer;text-align:center;transition:.15s}
+.agentCard .role{color:var(--gold);font-size:11px;letter-spacing:1px;margin:2px 0 8px;min-height:28px}
+.agentCard ul{list-style:none;text-align:left;font-size:11px;color:var(--dim);line-height:1.9}
+.agentCard ul li{display:flex;align-items:center;gap:5px}
+.agentCard ul svg{width:14px;height:14px;flex:none;color:var(--ac,#8fd3ff)}
+.agentCard ul .k{color:var(--dim);font-size:9px;width:9px;flex:none}
+.agentCard ul b{color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agentCard ul i{color:var(--dim);font-style:normal;font-size:9px;margin-left:auto;flex:none}
+#mapCards{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;max-width:1080px}
+.mapCard{width:150px;background:#131e29;border:1px solid #24333f;padding:10px 12px;cursor:pointer;text-align:center;transition:.15s}
 .mapCard:hover{border-color:var(--teal)}
 .mapCard.sel{border-color:var(--teal);background:#15303a;box-shadow:0 0 14px rgba(57,208,201,.25)}
 .mapCard h3{font-size:18px;letter-spacing:4px}
@@ -297,6 +306,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <button onclick="location.reload()">再 来 一 局</button>
 </div>
 
-<script type="module" src="./src/main.js?v=13"></script>
+<script type="module" src="./src/main.js?v=14"></script>
 </body>
 </html>

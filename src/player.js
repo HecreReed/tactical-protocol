@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=13';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=13';
-import { SKINS } from './config.js?v=13';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=13';
-import { useAbility } from './abilities.js?v=13';
-import { tracer, spawnSmoke } from './effects.js?v=13';
-import { sfx } from './audio.js?v=13';
+import { G, sens } from './state.js?v=14';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=14';
+import { SKINS } from './config.js?v=14';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=14';
+import { useAbility } from './abilities.js?v=14';
+import { tracer, spawnSmoke } from './effects.js?v=14';
+import { sfx } from './audio.js?v=14';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -133,7 +133,15 @@ export function buildViewModel(){
     emissive: sk.glow, emissiveIntensity: sk.glow ? .55 : 0,
   });
   skinMats = { body: dark, accent };
-  if(w.def.cat==='melee' || p.knifeUlt>0){
+  if(p.rocketUlt > 0){
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(.055,.06,.62,10), dark);
+    tube.rotation.x = Math.PI/2; tube.position.z = -.3;
+    const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(.07,.075,.1,10), accent);
+    muzzle.rotation.x = Math.PI/2; muzzle.position.z = -.62;
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(.035,.1,.045), dark);
+    grip.position.set(0,-.09,-.12); grip.rotation.x = .3;
+    g.add(tube, muzzle, grip);
+  } else if(w.def.cat==='melee' || p.knifeUlt>0){
     const blade = new THREE.Mesh(new THREE.BoxGeometry(.015,.05,.26), accent);
     blade.position.z = -.16;
     const handle = new THREE.Mesh(new THREE.BoxGeometry(.03,.04,.1), dark);
@@ -247,6 +255,19 @@ export function updatePlayer(dt){
         P.vmKick = .09;
         if(p.arrowUlt<=0) buildViewModel();
       }
+    } else if(p.rocketUlt > 0){
+      if(G.now >= w.nextFire){
+        w.nextFire = G.now + .9;
+        const dir = dirFromYawPitch(p.yaw, p.pitch);
+        const o = eyePos(p);
+        G.projectiles.push({ type:'rocket', owner:p, pos:o.clone().addScaledVector(dir,.8),
+          vel: dir.clone().multiplyScalar(26).add(V3(0,.4,0)), born:G.now });
+        sfx.shot('ult', 0);
+        p.rocketUlt--;
+        P.vmKick = .14; P.camShake = 1;
+        G.mouse.lmb = false;
+        if(p.rocketUlt<=0) buildViewModel();
+      }
     } else if(w.def.cat==='melee'){
       if(G.now - P.lastMelee > .45){ P.lastMelee = G.now; meleeAttack(p, false); P.vmKick = .09; }
     } else if(G.now >= w.nextFire && !w.reloadEnd){
@@ -311,8 +332,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=13';
-import { raySphere } from './utils.js?v=13';
+import { hitSpheres } from './combat.js?v=14';
+import { raySphere } from './utils.js?v=14';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
@@ -336,6 +357,7 @@ function shootPlayer(p, w, dt){
   if(ads) spread *= adsDef.spread ?? .6;
   if(p.crouch) spread *= .8;
   if(!p.grounded) spread *= 2.5;
+  if(G.now < p.dazeUntil) spread *= 1.8;
   const spreadRad = deg(spread);
 
   // recoil offsets applied to shot dir

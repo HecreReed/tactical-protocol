@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=13';
-import { buildMap } from './map.js?v=13';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=13';
-import { initAudio } from './audio.js?v=13';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=13';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=13';
-import { updateBots } from './bots.js?v=13';
-import { startMatch, updateGame } from './game.js?v=13';
-import { updateProjectiles, tickHealAndZones } from './abilities.js?v=13';
+import { G } from './state.js?v=14';
+import { buildMap } from './map.js?v=14';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=14';
+import { initAudio } from './audio.js?v=14';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=14';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=14';
+import { updateBots } from './bots.js?v=14';
+import { startMatch, updateGame } from './game.js?v=14';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=14';
 
 let started = false;
 let sun = null;
@@ -129,6 +129,7 @@ function loop(){
     else if(G.observer) updateObserver(dt);
     updateBots(dt);
     updateProjectiles(dt);
+    updateDeployables(dt);
     tickHealAndZones(dt);
     updateFX(dt);
     pulseBarriers();

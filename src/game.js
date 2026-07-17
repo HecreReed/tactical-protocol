@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=13';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=13';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=13';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=13';
-import { initAbilities, roundRefill } from './abilities.js?v=13';
-import { initBotAI, resetBotRound } from './bots.js?v=13';
-import { inSite } from './map.js?v=13';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers } from './effects.js?v=13';
-import { buildViewModel, switchSlot } from './player.js?v=13';
-import { sfx } from './audio.js?v=13';
+import { G } from './state.js?v=14';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=14';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=14';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=14';
+import { initAbilities, roundRefill } from './abilities.js?v=14';
+import { initBotAI, resetBotRound } from './bots.js?v=14';
+import { inSite } from './map.js?v=14';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers } from './effects.js?v=14';
+import { buildViewModel, switchSlot } from './player.js?v=14';
+import { sfx } from './audio.js?v=14';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];
@@ -474,14 +474,39 @@ export function tryBuyWeapon(id){
   const p = G.player, m = G.match;
   if(!p || m.phase!=='buy') return false;
   const def = WIDE(id);
-  if(!def || p.money < def.cost) { sfx.deny(); return false; }
+  if(!def) { sfx.deny(); return false; }
   const slot = def.cat==='pistol' ? 'secondary' : 'primary';
   if(p.weapons[slot]?.id === id) { sfx.deny(); return false; }
-  p.money -= def.cost;
+  // 同回合已购武器被替换时先全额退款（复刻无畏契约，防误购亏钱）
+  const old = p.weapons[slot];
+  const refund = (old && old.boughtRound === m.round && old.def.cost > 0) ? old.def.cost : 0;
+  if(p.money + refund < def.cost) { sfx.deny(); return false; }
+  p.money = Math.min(ECONOMY.max, p.money + refund) - def.cost;
   p.weapons[slot] = makeWeapon(id);
+  p.weapons[slot].boughtRound = m.round;
   switchSlot(p, slot);
   p.slot = slot;
   buildViewModel();
+  sfx.buy();
+  return true;
+}
+// 右键出售：同回合购买的武器可全额退款（复刻无畏契约）
+export function trySellWeapon(id){
+  const p = G.player, m = G.match;
+  if(!p || m.phase!=='buy') return false;
+  const def = WIDE(id);
+  if(!def) return false;
+  const slot = def.cat==='pistol' ? 'secondary' : 'primary';
+  const w = p.weapons[slot];
+  if(!w || w.id !== id || w.boughtRound !== m.round || def.cost <= 0){ sfx.deny(); return false; }
+  p.money = Math.min(ECONOMY.max, p.money + def.cost);
+  if(slot === 'primary'){
+    p.weapons.primary = null;
+    if(p.slot === 'primary') switchSlot(p, 'secondary');
+  } else {
+    p.weapons.secondary = makeWeapon('classic');
+    if(p.slot === 'secondary') buildViewModel();
+  }
   sfx.buy();
   return true;
 }

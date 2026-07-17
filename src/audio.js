@@ -1,5 +1,5 @@
-import { G } from './state.js?v=13';
-import { clamp } from './utils.js?v=13';
+import { G } from './state.js?v=14';
+import { clamp } from './utils.js?v=14';
 
 let ctx = null, master = null;
 
@@ -98,4 +98,7 @@ export const sfx = {
   reveal(){ playTone({f:1200,f2:1600,type:'sine',vol:.1,dur:.25}); playTone({f:1600,f2:2000,type:'sine',vol:.08,dur:.2,delay:.15}); },
   revealed(){ playTone({f:500,f2:350,type:'square',vol:.08,dur:.2}); },
   barrier(){ playNoise({vol:.25,lp:1500,hp:200,decay:.5,dur:.6}); playTone({f:800,f2:200,type:'sine',vol:.12,dur:.5}); },
+  nade(d=0){ const v=distVol(d*.6); playNoise({vol:.4*v,lp:1500,decay:.4,dur:.5}); playTone({f:80,f2:30,type:'sine',vol:.25*v,dur:.4}); },
+  stun(d=0){ const v=distVol(d*.6); playNoise({vol:.3*v,lp:600,decay:.5,dur:.6}); playTone({f:55,f2:28,type:'sine',vol:.3*v,dur:.55}); },
+  suppress(d=0){ const v=distVol(d); playTone({f:1600,f2:200,type:'sawtooth',vol:.12*v,dur:.5}); playTone({f:400,f2:120,type:'square',vol:.08*v,dur:.4,delay:.1}); },
 };

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=13';
-import { V3 } from './utils.js?v=13';
-import { sfx } from './audio.js?v=13';
+import { G } from './state.js?v=14';
+import { V3 } from './utils.js?v=14';
+import { sfx } from './audio.js?v=14';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -68,7 +68,7 @@ export function spawnSmoke(pos, r, dur){
 }
 
 // ---- zones (molly / slow / orbital) ----
-const zoneColors = { molly:0xff7a30, slow:0x7fd0ff, orbital:0xffd040 };
+const zoneColors = { molly:0xff7a30, slow:0x7fd0ff, orbital:0xffd040, toxic:0x59d97f };
 export function spawnZone(type, pos, r, dur, dps, owner){
   const mat = new THREE.MeshBasicMaterial({color:zoneColors[type]||0xffffff, transparent:true, opacity:.35, side:THREE.DoubleSide, depthWrite:false});
   const disc = new THREE.Mesh(new THREE.CircleGeometry(r,28), mat);
@@ -87,13 +87,68 @@ export function spawnZone(type, pos, r, dur, dps, owner){
   return z;
 }
 
-export function targetRing(pos, r, dur){
+export function targetRing(pos, r, dur, color=0xff4655){
   const ring = new THREE.Mesh(new THREE.RingGeometry(r*.9,r,32),
-    new THREE.MeshBasicMaterial({color:0xff4655, transparent:true, opacity:.8, side:THREE.DoubleSide, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color, transparent:true, opacity:.8, side:THREE.DoubleSide, depthWrite:false}));
   ring.rotation.x = -Math.PI/2;
   ring.position.copy(pos).y += .08;
   scene.add(ring);
   setTimeout(()=>scene.remove(ring), dur*1000);
+}
+
+// ---- 蛛影：哨戒炮塔 ----
+export function spawnTurret(pos, yaw, ent){
+  const g = new THREE.Group();
+  const teamCol = ent.team==='ally' ? 0x3fb3ad : 0xd04555;
+  const legMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.8});
+  for(let i=0;i<3;i++){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(.06,.5,.06), legMat);
+    const a = i/3*Math.PI*2;
+    leg.position.set(Math.cos(a)*.22,.25,Math.sin(a)*.22);
+    leg.rotation.z = Math.cos(a)*.35; leg.rotation.x = -Math.sin(a)*.35;
+    g.add(leg);
+  }
+  const head = new THREE.Mesh(new THREE.BoxGeometry(.42,.3,.42),
+    new THREE.MeshStandardMaterial({color:0x9fb0ba, roughness:.6, metalness:.3}));
+  head.position.y = .62;
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.4),
+    new THREE.MeshStandardMaterial({color:0x232b33, roughness:.5}));
+  barrel.rotation.x = Math.PI/2; barrel.position.set(0,.62,-.35);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(.05,6,4),
+    new THREE.MeshBasicMaterial({color:teamCol}));
+  eye.position.set(0,.7,-.22);
+  g.add(head, barrel, eye);
+  g.position.copy(pos); g.rotation.y = yaw;
+  scene.add(g);
+  const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:40, nextFire:0, mesh:g, until:G.now+45 };
+  G.turrets.push(t);
+  sfx.wall(G.player? pos.distanceTo(G.player.pos):0);
+  return t;
+}
+
+// ---- 蛛影：绊网 ----
+export function spawnTrap(pos, yaw, ent){
+  const g = new THREE.Group();
+  const postMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.8});
+  const w = 2.2;
+  const p1 = new THREE.Mesh(new THREE.CylinderGeometry(.04,.05,.9,5), postMat);
+  const p2 = p1.clone();
+  p1.position.set(-w/2,.45,0); p2.position.set(w/2,.45,0);
+  const wire = new THREE.Mesh(new THREE.BoxGeometry(w,.02,.02),
+    new THREE.MeshBasicMaterial({color:ent.team==='ally'?0x3fd0c9:0xff5060, transparent:true, opacity:.75}));
+  wire.position.y = .55;
+  g.add(p1,p2,wire);
+  g.position.copy(pos); g.rotation.y = yaw;
+  scene.add(g);
+  const tr = { pos:pos.clone(), team:ent.team, owner:ent, mesh:g, until:G.now+90 };
+  G.traps.push(tr);
+  return tr;
+}
+
+export function suppressFX(p){
+  const f = getFlash(0xb478ff, .5);
+  f.mesh.position.copy(p).y += 1;
+  f.life = f.max = .5; f.grow = 12;
 }
 
 // ---- sage wall ----
@@ -213,6 +268,10 @@ export function clearRoundFX(){
   G.dynColliders.length = 0;
   for(const c of G.corpses) if(c.mesh) scene.remove(c.mesh);
   G.corpses.length = 0;
+  for(const t of G.turrets) if(t.mesh) scene.remove(t.mesh);
+  G.turrets.length = 0;
+  for(const t of G.traps) if(t.mesh) scene.remove(t.mesh);
+  G.traps.length = 0;
 }
 export function removeMesh(m){ if(m) scene.remove(m); }
 export function addMesh(m){ scene.add(m); }

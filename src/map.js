@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=13";
-import { V3, rayAABB, dist2d } from "./utils.js?v=13";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=13";
+import { G } from "./state.js?v=14";
+import { V3, rayAABB, dist2d } from "./utils.js?v=14";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=14";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -643,80 +643,113 @@ function buildWalls(open){
 }
 function buildStairBoxes(s){
   const boxes=[],steps=Math.max(2,Math.ceil(s.h/.28));
-  for(let i=0;i<steps;i++){const h=s.h*(i+1)/steps;let x1=s.x1,x2=s.x2,z1=s.z1,z2=s.z2;
-    if(s.dir==='+x'){const w=(s.x2-s.x1)/steps;x1=s.x1+i*w;x2=x1+w;}else if(s.dir==='+z'){const w=(s.z2-s.z1)/steps;z1=s.z1+i*w;z2=z1+w;}
+  for(let i=0;i<steps;i++){
+    const h=s.h*(i+1)/steps;
+    let x1=s.x1,x2=s.x2,z1=s.z1,z2=s.z2;
+    if(s.dir==='+x'){const w=(s.x2-s.x1)/steps;x1=s.x1+i*w;x2=x1+w;}
+    else if(s.dir==='-x'){const w=(s.x2-s.x1)/steps;x2=s.x2-i*w;x1=x2-w;}
+    else if(s.dir==='+z'){const w=(s.z2-s.z1)/steps;z1=s.z1+i*w;z2=z1+w;}
+    else if(s.dir==='-z'){const w=(s.z2-s.z1)/steps;z2=s.z2-i*w;z1=z2-w;}
     boxes.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});}
   return boxes;
 }
 
-// 从地图数据构建碰撞体（外墙 + 内墙 + 平台 + 楼梯 + 箱子）
+// 从地图数据构建碰撞体（外墙 + 内墙 + 平台 + 桥面 + 楼梯 + 箱子）
 export function buildColliders(md, open){
   const colliders=[];
   for(const b of buildWalls(open)) colliders.push(b);
   for(const[x1,z1,x2,z2,h]of(md.innerWalls||[])) colliders.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});
   for(const[x1,z1,x2,z2,h]of(md.platforms||[])) colliders.push({min:V3(x1,0,z1),max:V3(x2,h,z2)});
+  for(const[x1,z1,x2,z2,y]of(md.bridges||[])) colliders.push({min:V3(x1,y-.35,z1),max:V3(x2,y,z2)});
   for(const s of(md.stairs||[])) for(const b of buildStairBoxes(s)) colliders.push(b);
-  for(const[cx,cz,s,h]of(md.crates||[])) colliders.push({min:V3(cx-s/2,0,cz-s/2),max:V3(cx+s/2,h,cz+s/2)});
+  for(const[cx,cz,s,h,tone,y0]of(md.crates||[])) colliders.push({min:V3(cx-s/2,y0||0,cz-s/2),max:V3(cx+s/2,(y0||0)+h,cz+s/2)});
   // 屋顶碰撞体向上加高：任何跳跃/技能都无法站上屋顶
   for(const[x1,z1,x2,z2,y]of(md.roofs||[])) colliders.push({min:V3(x1,y,z1),max:V3(x2,y+2.6,z2)});
   return colliders;
 }
 
-// 基于 1x1 单元格自动生成导航路点图；只保留从进攻出生点可达的连通区域
+// 双层网格导航：每格采样可站立楼层（地面 + 高台/桥面/楼梯顶 ≤3.2），
+// 相邻格高差 ≤.62 才连边（楼梯提供渐变），支持 AI 在高低差地图上寻路
 export function buildNav(md, colliders){
   const open = md.open;
-  const MARGIN = 0.45;                 // 与墙体/掩体保持距离（避免被矮箱卡住）
+  const MARGIN = 0.45;
   const inAny = (x,z)=>open.some(r=>inRect(x,z,r));
-  const inSolid = (x,z)=>colliders.some(b=>b.max.y>=0.45 && b.min.y<=1.4 && inRect(x,z,[b.min.x-MARGIN,b.min.z-MARGIN,b.max.x+MARGIN,b.max.z+MARGIN]));
+  const overlapsM = (b,x,z)=> x>b.min.x-MARGIN && x<b.max.x+MARGIN && z>b.min.z-MARGIN && z<b.max.z+MARGIN;
 
-  const cells = new Map();             // key "ix,iz" -> {x,z}
+  const cells = new Map();       // "ix,iz,f" -> {x,z,y:f}
+  const byCell = new Map();      // "ix,iz" -> [f,...]
   for(let ix=-40;ix<40;ix++){
     for(let iz=-40;iz<40;iz++){
       const x=ix+.5, z=iz+.5;
       if(!inAny(x,z)) continue;
-      if(inSolid(x,z)) continue;
-      cells.set(`${ix},${iz}`, {x,z});
+      const floors=new Set([0]);
+      for(const b of colliders){
+        if(b.max.y>3.2 || b.max.y<.25) continue;
+        if(x>b.min.x-.15 && x<b.max.x+.15 && z>b.min.z-.15 && z<b.max.z+.15) floors.add(Math.round(b.max.y*20)/20);
+      }
+      for(const f of floors){
+        let blocked=false;
+        for(const b of colliders){
+          if(b.max.y<=f+.45 || b.min.y>=f+1.65) continue;
+          if(overlapsM(b,x,z)){ blocked=true; break; }
+        }
+        if(blocked) continue;
+        cells.set(`${ix},${iz},${f}`, {x,z,y:f});
+        const ck=`${ix},${iz}`;
+        if(!byCell.has(ck)) byCell.set(ck,[]);
+        byCell.get(ck).push(f);
+      }
     }
   }
 
   const idx = new Map(), wps=[], edges=[];
   let id=0;
-  for(const key of cells.keys()){
+  for(const [key,c] of cells){
     idx.set(key,id++);
-    const c=cells.get(key);
-    wps.push(V3(c.x,1.1,c.z));
+    wps.push(V3(c.x, c.y+1.1, c.z));
     edges.push([]);
   }
 
   const _los=(a,b)=>{const dir=V3(b.x-a.x,b.y-a.y,b.z-a.z);const len=dir.length();if(len<1e-4)return true;dir.divideScalar(len);for(const box of colliders)if(rayAABB(a,dir,box,len)<len)return false;return true;};
   const _edge=(a,b)=>{const dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz)||1,px=-dz/l*.35,pz=dx/l*.35;
     for(const[ox,oz]of[[0,0],[px,pz],[-px,-pz]]){const A=V3(a.x+ox,a.y,a.z+oz),B=V3(b.x+ox,b.y,b.z+oz);if(!_los(A,B))return false;const Al=V3(A.x,a.y-.55,A.z),Bl=V3(B.x,b.y-.55,B.z);if(!_los(Al,Bl))return false;}return true;};
+  const nearFloor=(ck,f)=>{
+    const fl=byCell.get(ck); if(!fl) return null;
+    let best=null,bd=.63;
+    for(const g of fl){ const d=Math.abs(g-f); if(d<bd){bd=d;best=g;} }
+    return best;
+  };
 
+  const STEP = .62;
   for(const [key,c] of cells){
     const i=idx.get(key);
-    const [ix,iz]=key.split(',').map(Number);
-    // 四邻（可选）+ 对角线（需两边都通）
+    const [ix,iz] = key.split(',').map(Number);
+    const f = c.y;
     const dirs = [[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
     for(const [dx,dz] of dirs){
-      const k2=`${ix+dx},${iz+dz}`; if(!cells.has(k2)) continue;
+      const nf = nearFloor(`${ix+dx},${iz+dz}`, f);
+      if(nf===null || Math.abs(nf-f)>STEP) continue;
+      const k2=`${ix+dx},${iz+dz},${nf}`;
+      if(!cells.has(k2)) continue;
       const j=idx.get(k2);
-      // 对角线要求两个相邻正交格也在 cells 内（安全条件）
-      if(dx!==0 && dz!==0 && (!cells.has(`${ix+dx},${iz}`) || !cells.has(`${ix},${iz+dz}`))) continue;
+      if(dx!==0 && dz!==0){
+        const o1=nearFloor(`${ix+dx},${iz}`, f), o2=nearFloor(`${ix},${iz+dz}`, f);
+        if(o1===null || o2===null || Math.abs(o1-f)>STEP || Math.abs(o2-f)>STEP) continue;
+      }
       if(edges[i].includes(j)) continue;
       const c2=cells.get(k2);
-      if(!_edge(V3(c.x,1.1,c.z),V3(c2.x,1.1,c2.z))) continue;
+      if(!_edge(V3(c.x,f+1.1,c.z), V3(c2.x,nf+1.1,c2.z))) continue;
       edges[i].push(j); edges[j].push(i);
     }
   }
 
   // 先找出进攻出生点可达的最大连通区域，再在该区域内剪死胡同
-  const startCells = md.spawns.atk.map(([x,z])=>`${Math.floor(x)},${Math.floor(z)}`).filter(k=>cells.has(k));
+  const startCells = md.spawns.atk.map(([x,z])=>`${Math.floor(x)},${Math.floor(z)},0`).filter(k=>cells.has(k));
   const start = startCells.length ? idx.get(startCells[0]) : 0;
   const mainSet=new Set([start]), q=[start];
   while(q.length){const c=q.shift();for(const n of edges[c])if(!mainSet.has(n)){mainSet.add(n);q.push(n);}}
   if(mainSet.size!==wps.length) console.warn(`[map ${md.id}] nav disconnected cells: ${wps.length-mainSet.size}`);
 
-  // 剪掉死胡同：在最大连通区域内，保留 protected 点（出生点、点位、预设防守/集结位、要道）
   return pruneDeadEnds(wps, edges, md, mainSet);
 }
 
@@ -1005,9 +1038,20 @@ export function buildMap(scene, mapId){
     const edge=new THREE.Mesh(new THREE.BoxGeometry(x2-x1,.08,.12),new THREE.MeshStandardMaterial({color:md.accent,emissive:md.accent,emissiveIntensity:1.4}));edge.position.set((x1+x2)/2,h+.04,z2);scene.add(edge);}
   for(const s of(md.stairs||[]))for(const b of buildStairBoxes(s)){const m=new THREE.Mesh(new THREE.BoxGeometry(b.max.x-b.min.x,b.max.y-b.min.y,b.max.z-b.min.z),platMat);m.position.set((b.min.x+b.max.x)/2,(b.min.y+b.max.y)/2,(b.min.z+b.max.z)/2);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push(b);}
 
-  // 箱子
+  // 桥面（可上可下穿）：悬空板 + 发光沿
+  for(const[x1,z1,x2,z2,y]of(md.bridges||[])){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(x2-x1,.35,z2-z1),platMat);
+    m.position.set((x1+x2)/2,y-.175,(z1+z2)/2);m.castShadow=true;m.receiveShadow=true;scene.add(m);
+    colliders.push({min:V3(x1,y-.35,z1),max:V3(x2,y,z2)});
+    mmExtra.push({x1,z1,x2,z2,type:'plat'});
+    const glowMat=new THREE.MeshStandardMaterial({color:md.accent,emissive:md.accent,emissiveIntensity:1.4});
+    const e1=new THREE.Mesh(new THREE.BoxGeometry(x2-x1,.07,.1),glowMat);e1.position.set((x1+x2)/2,y+.03,z1+.05);scene.add(e1);
+    const e2=e1.clone();e2.position.z=z2-.05;scene.add(e2);
+  }
+
+  // 箱子（支持第 6 位参数 y0：放置在高台/桥面上）
   const ct0=crateTexture();
-  for(const[cx,cz,s,h,tone]of md.crates){const m=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),new THREE.MeshStandardMaterial({map:tone?mt0:ct0,roughness:.85,metalness:tone?.25:0}));m.position.set(cx,h/2,cz);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push({min:V3(cx-s/2,0,cz-s/2),max:V3(cx+s/2,h,cz+s/2)});mmExtra.push({x1:cx-s/2,z1:cz-s/2,x2:cx+s/2,z2:cz+s/2,type:'crate'});}
+  for(const[cx,cz,s,h,tone,y0]of md.crates){const base=y0||0;const m=new THREE.Mesh(new THREE.BoxGeometry(s,h,s),new THREE.MeshStandardMaterial({map:tone?mt0:ct0,roughness:.85,metalness:tone?.25:0}));m.position.set(cx,base+h/2,cz);m.castShadow=true;m.receiveShadow=true;scene.add(m);colliders.push({min:V3(cx-s/2,base,cz-s/2),max:V3(cx+s/2,base+h,cz+s/2)});mmExtra.push({x1:cx-s/2,z1:cz-s/2,x2:cx+s/2,z2:cz+s/2,type:'crate'});}
 
   // 屋顶（可从下方穿行）：平板 + 屋脊 + 檐口发光条
   const roofMat=new THREE.MeshStandardMaterial({color:0x4a3f36,roughness:.9,metalness:.05});
@@ -1077,20 +1121,22 @@ export function validateMaps(){
   return out;
 }
 
-export function nearestWp(pos){
+export function nearestWp(pos, yw=2){
   let best=0,bd=Infinity;
-  G.map.wps.forEach((w,i)=>{const d=dist2d(w,pos)+Math.abs((w.y-1.1)-pos.y)*2;if(d<bd){bd=d;best=i;}});
+  G.map.wps.forEach((w,i)=>{const d=dist2d(w,pos)+Math.abs((w.y-1.1)-pos.y)*yw;if(d<bd){bd=d;best=i;}});
   return best;
 }
-// 路径线段是否畅通（带玩家半径余量，检查静态和动态碰撞体）
+// 路径线段是否畅通（带玩家半径余量，检查静态和动态碰撞体；高度相对判定，支持高台/桥面）
 export function pathClear(a,b, margin=.45){
   const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
   const len = Math.hypot(dx,dy,dz); if(len<1e-4) return true;
   const l2 = Math.hypot(dx,dz)||1;
   const px = -dz/l2*margin, pz = dx/l2*margin;
+  const feet = Math.min(a.y,b.y) - 1.1;
   for(const list of [G.colliders, G.dynColliders]){
     for(const box of list){
-      if(box.max.y < .45 || box.min.y > 1.8) continue; // 可跨过的矮掩体 / 可从下方穿过的屋顶不算挡路
+      if(box.max.y < feet + .45) continue;         // 脚下楼层 / 可跨矮台阶
+      if(box.min.y > feet + 1.8) continue;         // 高于头顶（桥面/屋顶下穿行）
       for(const off of [[0,0],[px,pz],[-px,-pz]]){
         const o = V3(a.x+off[0], a.y, a.z+off[1]);
         const dir = V3(dx,dy,dz); dir.divideScalar(len);
@@ -1100,6 +1146,14 @@ export function pathClear(a,b, margin=.45){
     }
   }
   return true;
+}
+
+// 把目标点吸附到最近导航节点所在楼层（使高台/桥面上的驻点获得正确高度）
+export function snapToNav(p){
+  let best=null,bd=Infinity;
+  for(const w of G.map.wps){ const d=dist2d(w,p); if(d<bd){ bd=d; best=w; } }
+  if(best) p.y = Math.max(0, best.y - 1.1);
+  return p;
 }
 
 // ---- A* pathfinding with diagonal edges ----

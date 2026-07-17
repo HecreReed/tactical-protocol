@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=13';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=13';
-import { WIDE } from './config.js?v=13';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=13';
-import { sfx } from './audio.js?v=13';
+import { G } from './state.js?v=14';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=14';
+import { WIDE } from './config.js?v=14';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=14';
+import { sfx } from './audio.js?v=14';
 
 let nextId = 1;
 
@@ -24,8 +24,9 @@ export function makeEnt({name, team, agent, isPlayer=false}){
     slot: 'secondary',
     ab: {}, abCd: {},
     channel: null,           // 'plant' | 'defuse'
-    knifeUlt: 0, arrowUlt: 0,
+    knifeUlt: 0, arrowUlt: 0, rocketUlt: 0,
     flashUntil: 0, revealedUntil: 0, resistUntil: 0,
+    suppressedUntil: 0, dazeUntil: 0,
     mesh: null, tag: null, gunMesh: null,
     ai: null,
     lastDamaged: -99, lastShotAt: -99,
@@ -56,6 +57,7 @@ export function moveSpeed(ent){
   if(ent.crouch) s *= .62;
   if(ent.ads) s *= .75;
   if(G.now < ent.slowUntil) s *= .45;
+  if(G.now < ent.dazeUntil) s *= .6;
   if(G.now < ent.stimUntil) s *= 1.12;
   if(ent.channel) s = 0;
   return s * ent.speedMul;
@@ -226,6 +228,21 @@ export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
     const dir = V3().copy(baseDir).addScaledVector(right, a).addScaledVector(up, b).normalize();
     const hit = traceRay(origin, dir, 200, shooter);
     let end = V3().copy(origin).addScaledVector(dir, hit.dist);
+    // 哨戒炮塔受击（挡在弹道上时优先命中）
+    let tHit = null;
+    for(const t of G.turrets){
+      if(t.team === shooter.team || t.hp <= 0) continue;
+      const d = raySphere(origin, dir, V3(t.pos.x, t.pos.y+.6, t.pos.z), .62, hit.dist);
+      if(d < hit.dist && (!tHit || d < tHit.d)) tHit = { t, d };
+    }
+    if(tHit){
+      end = V3().copy(origin).addScaledVector(dir, tHit.d);
+      tHit.t.hp -= 34;
+      impactFX(end);
+      tracer(V3().copy(origin).addScaledVector(dir, 1.2).addScaledVector(right, shooter.isPlayer?.12:0), end, tracerColor);
+      if(shooter.isPlayer) G.hooks.hitmarker?.(false, false);
+      continue;
+    }
     let corpse = false;
     if(!hit.ent){
       const cd = corpseHit(origin, dir, hit.dist);
@@ -278,7 +295,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=13';
+import { AGENTS } from './config.js?v=14';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

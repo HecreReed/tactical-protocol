@@ -1,12 +1,13 @@
-import { G, saveSettings } from './state.js?v=13';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=13';
-import { MAPS, inAnyOpen } from './map.js?v=13';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=13';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=13';
-import { tryBuyWeapon, tryBuyArmor, sideOf } from './game.js?v=13';
-import { buyAbility } from './abilities.js?v=13';
-import { spawnSmoke, targetRing } from './effects.js?v=13';
-import { sfx, setVolume } from './audio.js?v=13';
+import { G, saveSettings } from './state.js?v=14';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=14';
+import { MAPS, inAnyOpen } from './map.js?v=14';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=14';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=14';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, sideOf } from './game.js?v=14';
+import { buyAbility } from './abilities.js?v=14';
+import { spawnSmoke, targetRing } from './effects.js?v=14';
+import { abilityIcon } from './icons.js?v=14';
+import { sfx, setVolume } from './audio.js?v=14';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -53,6 +54,7 @@ export function initHUD(){
   G.hooks.flash = playerFlashed;
   G.hooks.openSmokeMap = openSmokeMap;
   G.hooks.smokeMapKey = smokeMapKey;
+  G.hooks.dazed = playerDazed;
 
   els.smokeMapCanvas.addEventListener('click', smokeMapClick);
   els.smokeMap.addEventListener('contextmenu', e=>{ e.preventDefault(); closeSmokeMap(); });
@@ -80,6 +82,19 @@ function playerFlashed(dur){
     el.style.transition = `opacity ${dur*.75}s ease-in`;
     el.style.opacity = 0;
   }, dur*250);
+}
+
+// ---------- 震慑（岚切/绊网） ----------
+let dazeTimer = null;
+function playerDazed(dur){
+  const el = els.flashOverlay;
+  el.style.transition = 'none';
+  el.style.opacity = .38;
+  clearTimeout(dazeTimer);
+  dazeTimer = setTimeout(()=>{
+    el.style.transition = `opacity ${Math.min(1,dur*.5)}s ease-out`;
+    el.style.opacity = 0;
+  }, 120);
 }
 
 // ---------- 天穹战术地图下烟（原版炼狱式） ----------
@@ -262,12 +277,13 @@ export function showAgentSelect(cb){
   for(const [key,a] of Object.entries(AGENTS)){
     const card = document.createElement('div');
     card.className = 'agentCard';
+    card.style.setProperty('--ac', '#'+a.color.toString(16).padStart(6,'0'));
     card.innerHTML = `<div class="icon">${a.emoji}</div><h2>${a.name}</h2><div class="role">${a.role} · ${a.desc}</div>
       <ul>
-        <li>[C] <b>${a.ab.c.name}</b></li>
-        <li>[Q] <b>${a.ab.q.name}</b></li>
-        <li>[E] <b>${a.ab.e.name}</b>（免费）</li>
-        <li>[X] <b>${a.ab.x.name}</b>（${a.ultCost}点）</li>
+        <li>${abilityIcon(a.ab.c)}<span class="k">C</span><b>${a.ab.c.name}</b></li>
+        <li>${abilityIcon(a.ab.q)}<span class="k">Q</span><b>${a.ab.q.name}</b></li>
+        <li>${abilityIcon(a.ab.e)}<span class="k">E</span><b>${a.ab.e.name}</b> <i>免费</i></li>
+        <li>${abilityIcon(a.ab.x)}<span class="k">X</span><b>${a.ab.x.name}</b> <i>${a.ultCost}点</i></li>
       </ul>`;
     card.onclick = ()=>{
       els.agentSelect.classList.add('hidden');
@@ -305,6 +321,7 @@ export function setBuyOpen(open){
 function buildBuyMenu(){
   const p = G.player; if(!p) return;
   els.buyMoney.textContent = `¥ ${p.money}`;
+  const m = G.match;
   const cats = [
     ['pistol','副武器'],['smg','冲锋枪'],['shotgun','霰弹枪'],
     ['rifle','步枪'],['sniper','狙击枪'],['heavy','重机枪'],
@@ -313,8 +330,10 @@ function buildBuyMenu(){
   for(const [cat,label] of cats){
     html += `<div class="bcat"><h3>${label}</h3><div class="bgrid">`;
     for(const w of WEAPONS.filter(w=>w.cat===cat)){
-      const owned = p.weapons.primary?.id===w.id || p.weapons.secondary?.id===w.id;
-      const cls = owned?'owned': p.money<w.cost?'noafford':'';
+      const slot = w.cat==='pistol' ? 'secondary' : 'primary';
+      const owned = p.weapons[slot]?.id===w.id;
+      const sellable = owned && p.weapons[slot].boughtRound===m.round && w.cost>0;
+      const cls = owned ? (sellable?'owned sellable':'owned') : (p.money<w.cost?'noafford':'');
       html += `<div class="bitem ${cls}" data-w="${w.id}"><div class="nm">${w.name}</div><div class="pr">¥ ${w.cost}</div></div>`;
     }
     html += `</div></div>`;
@@ -322,6 +341,7 @@ function buildBuyMenu(){
   els.buyWeapons.innerHTML = html;
   els.buyWeapons.querySelectorAll('.bitem').forEach(el=>{
     el.onclick = ()=>{ if(tryBuyWeapon(el.dataset.w)) buildBuyMenu(); };
+    el.oncontextmenu = (e)=>{ e.preventDefault(); if(trySellWeapon(el.dataset.w)) buildBuyMenu(); };
   });
 
   const a = AGENTS[p.agent];
@@ -333,12 +353,13 @@ function buildBuyMenu(){
   for(const k of ['c','q']){
     const ab = p.ab[k], d = ab.def;
     const full = ab.n >= d.max;
-    rhtml += `<div class="bitem ${full?'owned':p.money<d.cost?'noafford':''}" data-ab="${k}">
-      <div class="nm">[${k.toUpperCase()}] ${d.name} (${ab.n}/${d.max})</div><div class="pr">¥ ${d.cost}</div></div>`;
+    rhtml += `<div class="bitem abitem ${full?'owned':p.money<d.cost?'noafford':''}" data-ab="${k}">
+      <div class="nm">${abilityIcon(d)}[${k.toUpperCase()}] ${d.name} (${ab.n}/${d.max})</div><div class="pr">¥ ${d.cost}</div></div>`;
   }
   rhtml += `</div></div>
   <div class="bcat"><h3>说明</h3>
   <div style="font-size:12px;color:#8b978f;line-height:2">
+  左键购买 · <b style="color:#f5c56b">右键出售本回合购买的武器（全额退款）</b><br>
   经济：击杀 +200 · 下包全队 +300 · 胜利 +3000<br>连败补偿 1900/2400/2900 · 存活保留装备<br>购买阶段结束自动开局</div></div>`;
   els.buyRight.innerHTML = rhtml;
   els.buyRight.querySelectorAll('[data-a]').forEach(el=>{
@@ -612,6 +633,9 @@ export function updateHUD(){
   } else if(p.arrowUlt>0){
     els.ammoNum.innerHTML = `${p.arrowUlt} <span>能量矢</span>`;
     els.weapName.textContent = '猎杀之矢（穿墙）';
+  } else if(p.rocketUlt>0){
+    els.ammoNum.innerHTML = `${p.rocketUlt} <span>火箭弹</span>`;
+    els.weapName.textContent = '毁灭者火箭';
   } else if(w.def.cat==='melee'){
     els.ammoNum.innerHTML = '—';
     els.weapName.textContent = '战术刀';
@@ -638,24 +662,24 @@ export function updateHUD(){
 
 let abCache = '';
 function renderAbilities(p, aDef){
+  const suppressed = G.now < (p.suppressedUntil||0);
   const parts = [];
   for(const k of ['c','q','e']){
     const ab = p.ab[k];
     const onCd = k==='e' && G.now < p.abCd.e;
-    const cdTxt = onCd ? Math.ceil(p.abCd.e - G.now) : '';
-    parts.push({k, name:ab.def.name, n:ab.n, empty: ab.n<=0||onCd, cdTxt});
+    const cdTxt = suppressed ? '⊘' : (onCd ? Math.ceil(p.abCd.e - G.now) : '');
+    parts.push({k, def:ab.def, name:ab.def.name, n:ab.n, empty: ab.n<=0||onCd||suppressed, cdTxt});
   }
   const ultReady = p.ult >= aDef.ultCost;
-  const sig = parts.map(x=>`${x.k}${x.n}${x.empty}${x.cdTxt}`).join()+`x${p.ult}${ultReady}`;
+  const sig = parts.map(x=>`${x.k}${x.n}${x.empty}${x.cdTxt}`).join()+`x${p.ult}${ultReady}${suppressed}`;
   if(sig===abCache) return;
   abCache = sig;
-  const icons = {c:'◆', q:'●', e:'▲', x:'✦'};
   els.abilityBox.innerHTML = parts.map(x=>
     `<div class="ab ${x.empty?'empty':''}" title="${x.name}">
-      <span class="key">${x.k.toUpperCase()}</span><span class="ic">${icons[x.k]}</span>
+      <span class="key">${x.k.toUpperCase()}</span><span class="ic">${abilityIcon(x.def)}</span>
       <span class="n">${x.cdTxt||x.n}</span></div>`
-  ).join('') + `<div class="ab ult ${ultReady?'ready':''}" title="${aDef.ab.x.name}">
-    <span class="key">X</span><span class="ic">${icons.x}</span>
+  ).join('') + `<div class="ab ult ${ultReady?'ready':''} ${suppressed?'empty':''}" title="${aDef.ab.x.name}">
+    <span class="key">X</span><span class="ic">${abilityIcon(aDef.ab.x)}</span>
     <span class="n">${p.ult}/${aDef.ultCost}</span></div>`;
 }
 

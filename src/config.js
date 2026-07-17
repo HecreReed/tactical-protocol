@@ -148,6 +148,51 @@ export const AGENTS = {
       x:{name:'复生',cost:0,max:1,start:0,cd:0,type:'rez',free:true},
     }
   },
+  leiyi: {
+    name:'雷奕', role:'决斗者', emoji:'💥', desc:'爆破狂人·炸药开路强攻', color:0xff9a3d,
+    ultCost:8, ab:{
+      c:{name:'爆破雷',cost:200,max:2,start:1,cd:0,type:'nade'},
+      q:{name:'轰爆弹',cost:300,max:1,start:1,cd:0,type:'bignade'},
+      e:{name:'爆炸跳跃',cost:0,max:1,start:1,cd:25,type:'blastjump',free:true},
+      x:{name:'毁灭者火箭',cost:0,max:1,start:0,cd:0,type:'rocketUlt',free:true},
+    }
+  },
+  zhuying: {
+    name:'蛛影', role:'哨卫', emoji:'🕷️', desc:'谍网大师·绊网哨炮锁区', color:0xbfcbd8,
+    ultCost:8, ab:{
+      c:{name:'绊网',cost:150,max:2,start:1,cd:0,type:'tripwire'},
+      q:{name:'哨戒炮',cost:400,max:1,start:1,cd:0,type:'turret'},
+      e:{name:'禁锢烟笼',cost:0,max:1,start:1,cd:30,type:'cage',free:true},
+      x:{name:'全域窃视',cost:0,max:1,start:0,cd:0,type:'revealAll',free:true},
+    }
+  },
+  lanqie: {
+    name:'岚切', role:'先锋', emoji:'👊', desc:'震荡先锋·穿墙震慑破防', color:0xd8a75a,
+    ultCost:8, ab:{
+      c:{name:'震荡爆破',cost:200,max:2,start:1,cd:0,type:'quake'},
+      q:{name:'穿墙闪光',cost:250,max:2,start:1,cd:0,type:'wallFlash'},
+      e:{name:'裂地震波',cost:0,max:1,start:1,cd:35,type:'stunWave',free:true},
+      x:{name:'雷动九天',cost:0,max:1,start:0,cd:0,type:'bigStun',free:true},
+    }
+  },
+  qingzhen: {
+    name:'青鸩', role:'控场者', emoji:'🐍', desc:'毒术师·毒幕毒池切割战场', color:0x59d97f,
+    ultCost:8, ab:{
+      c:{name:'剧毒烟云',cost:200,max:2,start:1,cd:0,type:'toxicSmoke'},
+      q:{name:'蚀骨毒池',cost:200,max:1,start:1,cd:0,type:'acidPool'},
+      e:{name:'蔓延毒幕',cost:0,max:1,start:1,cd:32,type:'toxicWall',free:true},
+      x:{name:'万毒领域',cost:0,max:1,start:0,cd:0,type:'toxicDome',free:true},
+    }
+  },
+  lingshi: {
+    name:'零式', role:'先锋', emoji:'🤖', desc:'战术机体·压制脉冲禁技', color:0x9fb4ff,
+    ultCost:7, ab:{
+      c:{name:'压制脉冲雷',cost:250,max:1,start:1,cd:0,type:'suppressNade'},
+      q:{name:'破片雷',cost:200,max:2,start:1,cd:0,type:'fragNade'},
+      e:{name:'电光闪雷',cost:0,max:1,start:1,cd:30,type:'flash',free:true},
+      x:{name:'湮灭脉冲',cost:0,max:1,start:0,cd:0,type:'nullPulse',free:true},
+    }
+  },
 };
 
 export const AGENT_LIST = Object.keys(AGENTS);

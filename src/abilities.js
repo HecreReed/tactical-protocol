@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=13';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand } from './utils.js?v=13';
-import { AGENTS } from './config.js?v=13';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX } from './effects.js?v=13';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=13';
-import { inAnyOpen } from './map.js?v=13';
-import { sfx } from './audio.js?v=13';
-import { raySphere } from './utils.js?v=13';
+import { G } from './state.js?v=14';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=14';
+import { AGENTS } from './config.js?v=14';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=14';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=14';
+import { inAnyOpen } from './map.js?v=14';
+import { sfx } from './audio.js?v=14';
+import { raySphere } from './utils.js?v=14';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -25,7 +25,9 @@ export function roundRefill(ent){
   ent.abCd.e = 0;
   ent.knifeUlt = 0;
   ent.arrowUlt = 0;
+  ent.rocketUlt = 0;
   ent.flashUntil = 0; ent.revealedUntil = 0; ent.resistUntil = 0;
+  ent.suppressedUntil = 0; ent.dazeUntil = 0;
 }
 
 function throwProj(ent, type, speed=16, upBoost=3){
@@ -150,11 +152,114 @@ function fireWall(ent){
   sfx.molly(0);
 }
 
+// ---------- 震慑（岚切） ----------
+export function coneDaze(ent, range, dot, dur){
+  const look = dirFromYawPitch(ent.yaw, 0);
+  for(const e of G.ents){
+    if(!e.alive || e.team === ent.team) continue;
+    const to = V3(e.pos.x-ent.pos.x, 0, e.pos.z-ent.pos.z);
+    const d = to.length();
+    if(d > range) continue;
+    to.normalize();
+    if(d > 3 && look.dot(to) < dot) continue;  // 锥形，穿墙
+    e.dazeUntil = Math.max(e.dazeUntil||0, G.now + dur);
+    e.slowUntil = Math.max(e.slowUntil||0, G.now + dur*.6);
+    if(e.isPlayer) G.hooks.dazed?.(dur);
+    if(!e.isPlayer && e.ai){ e.ai.burstLeft = 0; }
+  }
+  sfx.stun(0);
+}
+
+// ---------- 爆炸（雷奕/零式） ----------
+export function boomAt(pos, r, dmgNear, dmgFar, owner, name){
+  explosionFX(pos);
+  sfx.nade(G.player ? pos.distanceTo(G.player.pos) : 0);
+  for(const e of G.ents){
+    if(!e.alive || (owner && e.team === owner.team)) continue;
+    const d = dist2d(e.pos, pos);
+    if(d > r || Math.abs(e.pos.y - pos.y) > 3.2) continue;
+    const dmg = dmgFar + (dmgNear - dmgFar) * clamp(1 - d/r, 0, 1);
+    applyDamage(e, Math.round(dmg), owner, name, 'b');
+  }
+}
+
+// ---------- 压制（零式）：禁用技能 ----------
+export function popSuppress(point, r, dur, owner){
+  suppressFX(point);
+  targetRing(V3(point.x,0,point.z), r, 900, 0xb478ff);
+  sfx.suppress(G.player ? point.distanceTo(G.player.pos) : 0);
+  for(const e of G.ents){
+    if(!e.alive || (owner && e.team === owner.team)) continue;
+    if(dist2d(e.pos, point) > r) continue;
+    e.suppressedUntil = Math.max(e.suppressedUntil||0, G.now + dur);
+    if(e.isPlayer) G.hooks.hudMsg?.('你被压制了——技能暂时无法使用！');
+  }
+}
+
+// ---------- 部署物运行（哨戒炮 / 绊网） ----------
+export function updateDeployables(dt){
+  const ph = G.match?.phase;
+  // 哨戒炮塔
+  for(let i=G.turrets.length-1;i>=0;i--){
+    const t = G.turrets[i];
+    if(t.hp <= 0 || G.now > t.until){
+      if(t.hp <= 0) explosionFX(t.pos);
+      removeMesh(t.mesh); G.turrets.splice(i,1); continue;
+    }
+    if(ph!=='live' && ph!=='planted') continue;
+    const te = V3(t.pos.x, t.pos.y+.75, t.pos.z);
+    let best=null, bd=26;
+    for(const e of G.ents){
+      if(!e.alive || e.team===t.team || G.now < (e.suppressedUntil||-1)*0) continue;
+      const d = dist2d(e.pos, t.pos);
+      if(d < bd && !losBlocked(te, eyePos(e))){ bd = d; best = e; }
+    }
+    if(best){
+      const ty = yawTo(t.pos, best.pos);
+      t.yaw += angDiff(t.yaw, ty) * Math.min(1, dt*7);
+      if(t.mesh) t.mesh.rotation.y = t.yaw;
+      if(G.now >= t.nextFire && Math.abs(angDiff(t.yaw, ty)) < .25){
+        t.nextFire = G.now + .55;
+        tracer(te, eyePos(best), 0xffd070);
+        sfx.shot('smg', G.player ? te.distanceTo(G.player.pos) : 0);
+        if(Math.random() < .78) applyDamage(best, 7, t.owner, '哨戒炮', 'b');
+      }
+    }
+  }
+  // 绊网
+  for(let i=G.traps.length-1;i>=0;i--){
+    const tr = G.traps[i];
+    if(G.now > tr.until){ removeMesh(tr.mesh); G.traps.splice(i,1); continue; }
+    if(ph!=='live' && ph!=='planted') continue;
+    for(const e of G.ents){
+      if(!e.alive || e.team === tr.team) continue;
+      if(dist2d(e.pos, tr.pos) < 2.1 && Math.abs(e.pos.y - tr.pos.y) < 1.6){
+        e.slowUntil = Math.max(e.slowUntil||0, G.now + 2.6);
+        e.dazeUntil = Math.max(e.dazeUntil||0, G.now + 1.6);
+        e.revealedUntil = Math.max(e.revealedUntil||0, G.now + 3);
+        if(e.isPlayer) G.hooks.dazed?.(1.2);
+        // 通知拥有者队伍
+        for(const b of G.ents){
+          if(b.team!==tr.team || !b.alive || b.isPlayer || !b.ai) continue;
+          if(dist2d(b.pos, tr.pos) < 40){ b.ai.lastSeenPos.copy(e.pos); b.ai.lastSeenAt = G.now; }
+        }
+        sfx.revealed();
+        removeMesh(tr.mesh); G.traps.splice(i,1);
+        break;
+      }
+    }
+  }
+}
+
 // ============ 主动使用（玩家/AI 自身向技能） ============
 export function useAbility(ent, key){
   if(!ent.alive || ent.channel) return false;
   const ph = G.match?.phase;
   if(ph !== 'live' && ph !== 'planted') return false;
+  if(G.now < (ent.suppressedUntil||0)){
+    if(ent.isPlayer){ sfx.deny(); G.hooks.hudMsg?.('技能被压制中！'); }
+    return false;
+  }
   const slot = ent.ab[key];
   if(!slot) return false;
   const def = slot.def;
@@ -300,6 +405,126 @@ export function useAbility(ent, key){
       ent.arrowUlt = 3;
       sfx.ultReady();
       break;
+    // ---- 雷奕 ----
+    case 'nade':
+      throwProj(ent, 'nade', 17, 3.5); sfx.ability(); break;
+    case 'bignade':
+      throwProj(ent, 'bignade', 16, 4); sfx.ability(); break;
+    case 'blastjump': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      ent.vel.x = dir.x*8; ent.vel.z = dir.z*8; ent.vel.y = 7.2;
+      ent.grounded = false;
+      ent.dashUntil = G.now + .3;
+      ent.abCd.e = G.now + (def.cd||25);
+      boomAt(V3(ent.pos.x, ent.pos.y, ent.pos.z), 2, 0, 0, null, '爆炸跳跃');
+      sfx.dash();
+      break;
+    }
+    case 'rocketUlt':
+      ent.rocketUlt = 1;
+      sfx.ultReady();
+      break;
+    // ---- 蛛影 ----
+    case 'tripwire': {
+      const p = aimPoint(ent, 9);
+      spawnTrap(V3(p.x, ent.pos.y, p.z), ent.yaw, ent);
+      sfx.ability();
+      break;
+    }
+    case 'turret': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      const p = V3(ent.pos.x + dir.x*1.4, ent.pos.y, ent.pos.z + dir.z*1.4);
+      if(!inAnyOpen(p.x, p.z)){ p.set(ent.pos.x, ent.pos.y, ent.pos.z); }
+      spawnTurret(p, ent.yaw, ent);
+      break;
+    }
+    case 'cage': {
+      const p = aimPoint(ent, 26);
+      spawnSmoke(p, 3.4, 8);
+      spawnZone('slow', p, 3.4, 8, 0, ent);
+      ent.abCd.e = G.now + (def.cd||30);
+      break;
+    }
+    case 'revealAll': {
+      let n = 0;
+      for(const e of G.ents){
+        if(!e.alive || e.team === ent.team) continue;
+        e.revealedUntil = Math.max(e.revealedUntil||0, G.now + 5);
+        if(e.isPlayer) sfx.revealed();
+        n++;
+        for(const b of G.ents){
+          if(b.team !== ent.team || b.isPlayer || !b.alive || !b.ai) continue;
+          if(!b.ai.target && dist2d(b.pos, e.pos) < 50){ b.ai.lastSeenPos.copy(e.pos); b.ai.lastSeenAt = G.now; }
+        }
+      }
+      sfx.reveal();
+      if(ent.isPlayer) G.hooks.hudMsg?.(`全域窃视：标记了 ${n} 名敌人`);
+      break;
+    }
+    // ---- 岚切 ----
+    case 'quake': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      const p = V3(ent.pos.x + dir.x*7.5, 0, ent.pos.z + dir.z*7.5);
+      targetRing(p, 3.2, 650, 0xffa040);
+      setTimeout(()=>{
+        const phn = G.match?.phase;
+        if(phn!=='live' && phn!=='planted') return;
+        explosionFX(V3(p.x, .5, p.z));
+        sfx.nade(G.player ? p.distanceTo(G.player.pos) : 0);
+        for(const e of G.ents){
+          if(!e.alive || e.team===ent.team) continue;
+          if(dist2d(e.pos, p) < 3.4 && e.pos.y < 3) applyDamage(e, 60, ent, '震荡爆破', 'b');
+        }
+      }, 650);
+      sfx.ability();
+      break;
+    }
+    case 'wallFlash':
+      coneFlash(ent, 1.5); break;
+    case 'stunWave':
+      coneDaze(ent, 18, .72, 2.4);
+      ent.abCd.e = G.now + (def.cd||35);
+      break;
+    case 'bigStun':
+      coneDaze(ent, 26, .55, 3.2);
+      sfx.ultReady();
+      break;
+    // ---- 青鸩 ----
+    case 'toxicSmoke': {
+      const p = aimPoint(ent, 40);
+      spawnSmoke(p, 3.8, 11);
+      spawnZone('toxic', p, 3.4, 11, 8, ent);
+      break;
+    }
+    case 'acidPool':
+      throwProj(ent, 'acid', 15, 3); sfx.ability(); break;
+    case 'toxicWall': {
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      for(let i=0;i<7;i++){
+        const p = V3(ent.pos.x + dir.x*(4+i*3), 0, ent.pos.z + dir.z*(4+i*3));
+        spawnSmoke(p, 2.4, 12);
+      }
+      ent.abCd.e = G.now + (def.cd||32);
+      break;
+    }
+    case 'toxicDome': {
+      const p = aimPoint(ent, 45);
+      spawnSmoke(p, 9, 26);
+      spawnZone('toxic', p, 8.5, 26, 6, ent);
+      sfx.ultReady();
+      break;
+    }
+    // ---- 零式 ----
+    case 'suppressNade':
+      throwProj(ent, 'suppress', 16, 3); sfx.ability(); break;
+    case 'fragNade':
+      throwProj(ent, 'frag', 17, 3.5); sfx.ability(); break;
+    case 'nullPulse': {
+      popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
+      ent.stimUntil = G.now + 8;
+      sfx.ultReady();
+      break;
+    }
   }
 
   if(used){
@@ -326,6 +551,7 @@ export function botCast(bot, key, point, target){
   if(!bot.alive) return false;
   const ph = G.match?.phase;
   if(ph !== 'live' && ph !== 'planted') return false;
+  if(G.now < (bot.suppressedUntil||0)) return false;
   const slot = bot.ab[key];
   if(!slot) return false;
   const def = slot.def;
@@ -392,7 +618,83 @@ export function botCast(bot, key, point, target){
       break;
     case 'stim': bot.stimUntil = G.now + 12; break;
     case 'dash': case 'updraft': case 'shadowStep': case 'phoenixUlt': case 'knifeUlt': case 'rez': case 'firewall':
+    case 'blastjump': case 'revealAll': case 'nullPulse': case 'bigStun': case 'stunWave': case 'turret':
       return useAbility(bot, key);
+    case 'nade': case 'bignade': case 'fragNade': {
+      const p = V3(point.x, 0, point.z);
+      targetRing(p, 3, 700, 0xffa040);
+      const big = def.type==='bignade';
+      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted')
+        boomAt(p, big?4:3.2, big?75:50, big?35:22, bot, def.name); }, 700);
+      break;
+    }
+    case 'rocketUlt': {
+      const o = eyePos(bot);
+      const dir = V3(point.x - o.x, (point.y||0) + .5 - o.y, point.z - o.z).normalize();
+      G.projectiles.push({ type:'rocket', owner:bot, pos:o.clone().addScaledVector(dir,.8),
+        vel: dir.multiplyScalar(26), born:G.now });
+      sfx.shot('ult', G.player ? o.distanceTo(G.player.pos) : 0);
+      break;
+    }
+    case 'tripwire':
+      spawnTrap(V3(point.x, bot.pos.y, point.z), yawTo(bot.pos, point) + Math.PI/2, bot); break;
+    case 'cage': {
+      const p = V3(point.x, 0, point.z);
+      spawnSmoke(p, 3.4, 8);
+      spawnZone('slow', p, 3.4, 8, 0, bot);
+      bot.abCd.e = G.now + (def.cd||30);
+      break;
+    }
+    case 'quake': {
+      const p = V3(point.x, 0, point.z);
+      targetRing(p, 3.2, 650, 0xffa040);
+      setTimeout(()=>{
+        const phn = G.match?.phase;
+        if(phn!=='live' && phn!=='planted') return;
+        explosionFX(V3(p.x,.5,p.z));
+        sfx.nade(G.player ? p.distanceTo(G.player.pos) : 0);
+        for(const e of G.ents){
+          if(!e.alive || e.team===bot.team) continue;
+          if(dist2d(e.pos, p) < 3.4 && e.pos.y < 3) applyDamage(e, 60, bot, '震荡爆破', 'b');
+        }
+      }, 650);
+      break;
+    }
+    case 'wallFlash':
+      bot.yaw = yawTo(bot.pos, point);
+      coneFlash(bot, 1.5); break;
+    case 'toxicSmoke': {
+      const p = V3(point.x, 0, point.z);
+      spawnSmoke(p, 3.8, 11);
+      spawnZone('toxic', p, 3.4, 11, 8, bot);
+      break;
+    }
+    case 'acidPool':
+      spawnZone('toxic', V3(point.x,0,point.z), 3.6, 8, 12, bot);
+      sfx.molly(G.player ? point.distanceTo(G.player.pos) : 0);
+      break;
+    case 'toxicWall': {
+      bot.yaw = yawTo(bot.pos, point);
+      const dir = dirFromYawPitch(bot.yaw, 0);
+      for(let i=0;i<7;i++){
+        const p = V3(bot.pos.x + dir.x*(4+i*3), 0, bot.pos.z + dir.z*(4+i*3));
+        spawnSmoke(p, 2.4, 12);
+      }
+      bot.abCd.e = G.now + (def.cd||32);
+      break;
+    }
+    case 'toxicDome': {
+      const p = V3(point.x, 0, point.z);
+      spawnSmoke(p, 9, 26);
+      spawnZone('toxic', p, 8.5, 26, 6, bot);
+      break;
+    }
+    case 'suppressNade': {
+      const p = V3(point.x, .8, point.z);
+      targetRing(V3(p.x,0,p.z), 5.5, 700, 0xb478ff);
+      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popSuppress(p, 5.5, 5, bot); }, 700);
+      break;
+    }
     case 'hunterUlt': {
       // 穿墙猎杀：对目标直接三段能量矢
       const t = target;
@@ -402,7 +704,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=13').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=14').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -431,7 +733,7 @@ export function buyAbility(ent, key){
 export function updateProjectiles(dt){
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
-    p.vel.y -= 14*dt;
+    p.vel.y -= (p.type==='rocket' ? 2.5 : 14)*dt;
     const step = p.vel.length()*dt;
     const dir = p.vel.clone().normalize();
     const wallD = rayWalls(p.pos, dir, step + .2);
@@ -445,6 +747,14 @@ export function updateProjectiles(dt){
     if(p.pos.y <= .15){ p.pos.y = .15; landed = true; }
     // 闪光弹空中起爆
     if(p.type==='flash' && !landed && G.now - p.born > .55) landed = true;
+    // 火箭弹直接命中检测
+    if(p.type==='rocket' && !landed){
+      for(const e of G.ents){
+        if(e===p.owner || !e.alive) continue;
+        if(p.pos.distanceTo(V3(e.pos.x, e.pos.y+1, e.pos.z)) < .9){ landed = true; break; }
+      }
+      if(G.now - p.born > 4) landed = true;
+    }
     if(landed){
       switch(p.type){
         case 'smoke': spawnSmoke(p.pos.clone().setY(0), 3.4, 5.5); break;
@@ -464,6 +774,15 @@ export function updateProjectiles(dt){
           setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(pt, 14, 2.5, p.owner.team); }, 1600);
           break;
         }
+        case 'nade': boomAt(p.pos.clone(), 3.2, 50, 22, p.owner, '爆破雷'); break;
+        case 'bignade': boomAt(p.pos.clone(), 4.2, 75, 35, p.owner, '轰爆弹'); break;
+        case 'frag': boomAt(p.pos.clone(), 3.4, 55, 25, p.owner, '破片雷'); break;
+        case 'rocket': boomAt(p.pos.clone(), 5.2, 150, 60, p.owner, '毁灭者火箭'); break;
+        case 'acid':
+          spawnZone('toxic', p.pos.clone().setY(0), 3.6, 8, 12, p.owner);
+          sfx.molly(G.player ? p.pos.distanceTo(G.player.pos) : 0);
+          break;
+        case 'suppress': popSuppress(p.pos.clone().setY(Math.max(.8,p.pos.y)), 5.5, 5, p.owner); break;
       }
       G.projectiles.splice(i,1);
     }

@@ -1,9 +1,9 @@
-import { G } from './state.js?v=13';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=13';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=13';
-import { findPath, inSite, nearestWp, pathClear } from './map.js?v=13';
-import { useAbility, botCast } from './abilities.js?v=13';
-import { sfx } from './audio.js?v=13';
+import { G } from './state.js?v=14';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=14';
+import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=14';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=14';
+import { useAbility, botCast } from './abilities.js?v=14';
+import { sfx } from './audio.js?v=14';
 
 const THINK_DT = .12;
 
@@ -74,11 +74,12 @@ function setPath(bot, dest){
 
 function lookaheadTarget(bot, path, pathI){
   const maxSteps = 8, maxD = 7;
+  const from = V3(bot.pos.x, bot.pos.y + 1.1, bot.pos.z);  // 转为路点 y 语义
   let best = pathI;
   for(let i = pathI + 1; i < path.length && i <= pathI + maxSteps; i++){
     const wp = path[i];
     if(dist2d(bot.pos, wp) > maxD) break;
-    if(pathClear(bot.pos, wp, .45)) best = i;
+    if(pathClear(from, wp, .45)) best = i;
   }
   return path[best];
 }
@@ -93,13 +94,14 @@ function followPath(bot, dt, sprint=true){
     bot.vel.x *= .35; bot.vel.z *= .35; return true;
   }
   // 推进已越过的中间节点
+  const fromWp = V3(bot.pos.x, bot.pos.y + 1.1, bot.pos.z);
   while(a.pathI < a.path.length - 1){
     const cur = a.path[a.pathI], nxt = a.path[a.pathI+1];
     const dx = nxt.x - cur.x, dz = nxt.z - cur.z;
     const len2 = dx*dx + dz*dz;
     if(len2 < 1e-4){ a.pathI++; continue; }
     const t = ((bot.pos.x - cur.x)*dx + (bot.pos.z - cur.z)*dz) / len2;
-    if(t > 0.65 && pathClear(bot.pos, nxt, .45)){ a.pathI++; }
+    if(t > 0.65 && pathClear(fromWp, nxt, .45)){ a.pathI++; }
     else break;
   }
   if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
@@ -191,7 +193,7 @@ function stuckCheck(bot, dt){
     a.lastGoalDist = gd;
   }
 
-  if(intent && moved < .03 && progress < .02){
+  if(intent && moved < .12 && progress < .02){
     a.stuckT += dt;
     // 分级脱困
     if(a.stuckT > .4 && (!a.sideUntil || G.now > a.sideUntil + .4)){
@@ -211,7 +213,7 @@ function stuckCheck(bot, dt){
     }
     if(a.stuckT > 3.5 && !a.target){
       const w = G.map.wps[nearestWp(bot.pos)];
-      bot.pos.x = w.x; bot.pos.z = w.z; bot.vel.set(0,0,0);
+      bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1); bot.vel.set(0,0,0);
       a.stuckT = 0; a.sideUntil = 0; a.backUntil = 0; a.lastGoalDist = undefined;
       if(a.goal) setPath(bot, a.goal);
     }
@@ -221,7 +223,7 @@ function stuckCheck(bot, dt){
       if(a.giveUp > 2){ a.goal = null; a.state = 'wait'; a.giveUp = 0; }
       a.stuckT = 0;
     }
-  } else if(moved > .05 || progress > .04){
+  } else if(progress > .04 || (!a.goal && moved > .05)){
     a.stuckT = Math.max(0, a.stuckT - dt*2.8);
     if(a.stuckT <= 0){ a.stuckT = 0; a.sideUntil = 0; a.backUntil = 0; a.giveUp = 0; }
   }
@@ -250,7 +252,8 @@ function combatUpdate(bot, dt){
   // 目标习得：持续可见时间越长瞄得越准
   a.acqT += dt;
   const acqNorm = clamp(a.acqT / (1.0 - .45*D()), 0, 1);
-  const errMul = 2.3 - 1.3*acqNorm;
+  const dazed = G.now < (bot.dazeUntil||0);
+  const errMul = (2.3 - 1.3*acqNorm) * (dazed ? 2.3 : 1);
 
   // 瞄准点 + 移动预判
   const aimP = eyePos(t);
@@ -262,7 +265,7 @@ function combatUpdate(bot, dt){
   const ty = yawTo(bot.pos, aimP);
   const eye = eyePos(bot);
   const tp = pitchTo(eye, aimP);
-  const aimSpd = 7 + D()*8;
+  const aimSpd = (7 + D()*8) * (dazed ? .45 : 1);
   bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*aimSpd);
   bot.pitch += (tp - bot.pitch) * Math.min(1, dt*aimSpd);
 
@@ -466,6 +469,84 @@ function botAbilities(bot){
       }
       break;
     }
+    case 'leiyi': {
+      if(side==='atk' && executing && a.goal && bot.ab.q.n>0 && !a.flags.execNade && tryGate(a,'q',4)){
+        a.flags.execNade = true;
+        botCast(bot,'q', a.goal);
+      }
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.c.n>0 && tryGate(a,'c',7))
+        botCast(bot,'c', a.lastSeenPos);
+      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
+      if(bot.ult>=8 && inCombat && dist2d(bot.pos,t.pos)>8 && dist2d(bot.pos,t.pos)<30 && tryGate(a,'x',10))
+        botCast(bot,'x', eyePos(t), t);
+      break;
+    }
+    case 'zhuying': {
+      // 到达驻点后布防：哨戒炮 + 绊网
+      const settled = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
+      if(settled && bot.ab.q.n>0 && !a.flags.turret && tryGate(a,'q',3)){
+        a.flags.turret = true;
+        useAbility(bot,'q');
+      }
+      if(settled && bot.ab.c.n>0 && !a.flags.wire && tryGate(a,'c',3)){
+        a.flags.wire = true;
+        const ch = nearestChokeTo(bot.pos);
+        botCast(bot,'c', ch || V3(bot.pos.x+rand(-3,3),0,bot.pos.z+rand(-3,3)));
+      }
+      if(sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8))
+        botCast(bot,'e', sp.pos);
+      if(bot.ult>=8 && (sp.state==='planted' || (side==='atk'&&executing)) && tryGate(a,'x',10))
+        useAbility(bot,'x');
+      break;
+    }
+    case 'lanqie': {
+      if(side==='atk' && executing && a.goal && bot.ab.q.n>0 && !a.flags.entryFlash && tryGate(a,'q',4)){
+        a.flags.entryFlash = true;
+        botCast(bot,'q', a.goal);
+      }
+      if(inCombat && dist2d(bot.pos,t.pos)<17 && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8)){
+        bot.yaw = yawTo(bot.pos, t.pos);
+        useAbility(bot,'e');
+      }
+      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.c.n>0 && tryGate(a,'c',8))
+        botCast(bot,'c', a.lastSeenPos);
+      if(bot.ult>=8 && ((side==='atk'&&executing) || (side==='def'&&sp.state==='planted'&&dist2d(bot.pos,sp.pos)<24)) && tryGate(a,'x',8)){
+        const dest = side==='atk' ? a.goal : sp.pos;
+        if(dest){ bot.yaw = yawTo(bot.pos, dest); useAbility(bot,'x'); }
+      }
+      break;
+    }
+    case 'qingzhen': {
+      if(side==='atk' && (executing || (pushing(a) && a.goal && dist2d(bot.pos,a.goal)<30)) && bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.wall && tryGate(a,'e',4)){
+        a.flags.wall = true;
+        botCast(bot,'e', a.goal || V3(bot.pos.x,0,bot.pos.z-10));
+      }
+      if(side==='def' && !a.flags.defOpenSmoke && a.hold && G.now - m.liveStart > 2 && G.now - m.liveStart < 10 && bot.ab.c.n>0){
+        a.flags.defOpenSmoke = true;
+        const ch = nearestChokeTo(a.hold);
+        if(ch) botCast(bot,'c', ch);
+      }
+      if(enemyChanneling && bot.ab.q.n>0 && tryGate(a,'q',6)) botCast(bot,'q', enemyChanneling.pos);
+      if(bot.ult>=8 && sp.state==='planted' && tryGate(a,'x',10)) botCast(bot,'x', sp.pos);
+      break;
+    }
+    case 'lingshi': {
+      if(side==='atk' && executing && a.goal && bot.ab.c.n>0 && !a.flags.suppress && tryGate(a,'c',4)){
+        a.flags.suppress = true;
+        botCast(bot,'c', a.goal);
+      }
+      if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.c.n>0 && tryGate(a,'c',8))
+        botCast(bot,'c', sp.pos);
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8))
+        botCast(bot,'e', a.lastSeenPos);
+      if(enemyChanneling && bot.ab.q.n>0 && tryGate(a,'q',6)) botCast(bot,'q', enemyChanneling.pos);
+      if(bot.ult>=7 && tryGate(a,'x',6)){
+        const near = G.ents.filter(e=>e.alive && e.team!==bot.team && dist2d(e.pos,bot.pos)<15).length;
+        if(near >= 2) useAbility(bot,'x');
+      }
+      break;
+    }
   }
 }
 
@@ -531,7 +612,7 @@ export function updateBots(dt){
         if(!a.hold){
           const posts = G.map.defPostList;
           const p = posts[a.role % posts.length];
-          a.hold = V3(p.p[0],0,p.p[1]);
+          a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
           a.holdLook = V3(p.look[0],1.5,p.look[1]);
           a.goal = a.hold;
           a.state = 'post';
@@ -654,7 +735,7 @@ function thinkAttack(bot){
     if(!a.hold){
       const holds = G.map.atkHolds[sp.site] || [];
       const h = holds[a.role % holds.length];
-      a.hold = V3(h.p[0],0,h.p[1]); a.holdLook = V3(h.look[0],1.5,h.look[1]);
+      a.hold = snapToNav(V3(h.p[0],0,h.p[1])); a.holdLook = V3(h.look[0],1.5,h.look[1]);
     }
     a.state='hold'; a.goal = a.hold;
     if(needRepath(bot, a.hold)) setPath(bot, a.hold);
@@ -727,7 +808,7 @@ function thinkAttack(bot){
         a.state = 'execute';
         const holds = G.map.atkHolds[site] || [];
         const h = holds[a.role % holds.length];
-        a.hold = V3(h.p[0],0,h.p[1]); a.holdLook = V3(h.look[0],1.5,h.look[1]);
+        a.hold = snapToNav(V3(h.p[0],0,h.p[1])); a.holdLook = V3(h.look[0],1.5,h.look[1]);
         a.goal = (sp.carrier===bot ? plantPos.clone() : a.hold.clone());
         setPath(bot, a.goal);
       }
@@ -805,7 +886,7 @@ function thinkDefend(bot){
     const posts = G.map.defPostList;
     if(posts.length > 1){
       const p = posts[(a.role + 1 + Math.floor(Math.random()*(posts.length-1))) % posts.length];
-      a.hold = V3(p.p[0],0,p.p[1]);
+      a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
       a.holdLook = V3(p.look[0],1.5,p.look[1]);
       a.state='post'; a.goal = a.hold;
       setPath(bot, a.hold);
@@ -827,7 +908,7 @@ function thinkDefend(bot){
   if(!a.hold){
     const posts = G.map.defPostList;
     const p = posts[bot.ai.role % posts.length];
-    a.hold = V3(p.p[0],0,p.p[1]);
+    a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
     a.holdLook = V3(p.look[0],1.5,p.look[1]);
     a.state='post';
     setPath(bot, a.hold);
