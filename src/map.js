@@ -1,7 +1,8 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=16";
-import { V3, rayAABB, dist2d } from "./utils.js?v=16";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=16";
+import { G } from "./state.js?v=17";
+import { V3, rayAABB, dist2d } from "./utils.js?v=17";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=17";
+const HALF = WORLD/2;   // 55
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -636,9 +637,9 @@ export function inAnyOpen(x,z){return G.map.openRects.some(r=>inRect(x,z,r));}
 function buildWalls(open){
   const isOpen=(x,z)=>open.some(r=>inRect(x,z,r));
   const boxes=[];
-  for(let z=-40;z<40;z+=1){let rs=null;
-    for(let x=-40;x<=40;x+=1){const solid=x<40&&!isOpen(x+.5,z+.5);
-      if(solid&&rs===null)rs=x;if((!solid||x===40)&&rs!==null){boxes.push({min:V3(rs,0,z),max:V3(x,4,z+1)});rs=null;}}}
+  for(let z=-HALF;z<HALF;z+=1){let rs=null;
+    for(let x=-HALF;x<=HALF;x+=1){const solid=x<HALF&&!isOpen(x+.5,z+.5);
+      if(solid&&rs===null)rs=x;if((!solid||x===HALF)&&rs!==null){boxes.push({min:V3(rs,0,z),max:V3(x,4,z+1)});rs=null;}}}
   return boxes;
 }
 function buildStairBoxes(s){
@@ -676,20 +677,47 @@ export function buildNav(md, colliders){
   const inAny = (x,z)=>open.some(r=>inRect(x,z,r));
   const overlapsM = (b,x,z)=> x>b.min.x-MARGIN && x<b.max.x+MARGIN && z>b.min.z-MARGIN && z<b.max.z+MARGIN;
 
+  // ---- 碰撞体分桶（空间哈希）：大世界下加速楼层采样与 LOS ----
+  const BS = 5, BN = Math.ceil(WORLD/BS)+1;
+  const buckets = new Map();
+  const bkey = (bx,bz)=> bx*1000+bz;
+  for(const b of colliders){
+    const x0=Math.max(0,Math.floor((b.min.x+HALF)/BS)), x1=Math.min(BN-1,Math.floor((b.max.x+HALF)/BS));
+    const z0=Math.max(0,Math.floor((b.min.z+HALF)/BS)), z1=Math.min(BN-1,Math.floor((b.max.z+HALF)/BS));
+    for(let bx=x0;bx<=x1;bx++) for(let bz=z0;bz<=z1;bz++){
+      const k=bkey(bx,bz);
+      if(!buckets.has(k)) buckets.set(k,[]);
+      buckets.get(k).push(b);
+    }
+  }
+  let qStamp = 0;
+  const qOut = [];
+  const query = (minx,minz,maxx,maxz)=>{
+    qOut.length = 0; qStamp++;
+    const x0=Math.max(0,Math.floor((minx+HALF)/BS)), x1=Math.min(BN-1,Math.floor((maxx+HALF)/BS));
+    const z0=Math.max(0,Math.floor((minz+HALF)/BS)), z1=Math.min(BN-1,Math.floor((maxz+HALF)/BS));
+    for(let bx=x0;bx<=x1;bx++) for(let bz=z0;bz<=z1;bz++){
+      const arr=buckets.get(bkey(bx,bz)); if(!arr) continue;
+      for(const b of arr){ if(b._q===qStamp) continue; b._q=qStamp; qOut.push(b); }
+    }
+    return qOut;
+  };
+
   const cells = new Map();       // "ix,iz,f" -> {x,z,y:f}
   const byCell = new Map();      // "ix,iz" -> [f,...]
-  for(let ix=-40;ix<40;ix++){
-    for(let iz=-40;iz<40;iz++){
+  for(let ix=-HALF;ix<HALF;ix++){
+    for(let iz=-HALF;iz<HALF;iz++){
       const x=ix+.5, z=iz+.5;
       if(!inAny(x,z)) continue;
+      const near = query(x-1, z-1, x+1, z+1);
       const floors=new Set([0]);
-      for(const b of colliders){
+      for(const b of near){
         if(b.max.y>3.2 || b.max.y<.25) continue;
         if(x>b.min.x-.15 && x<b.max.x+.15 && z>b.min.z-.15 && z<b.max.z+.15) floors.add(Math.round(b.max.y*20)/20);
       }
       for(const f of floors){
         let blocked=false;
-        for(const b of colliders){
+        for(const b of near){
           if(b.max.y<=f+.45 || b.min.y>=f+1.65) continue;
           if(overlapsM(b,x,z)){ blocked=true; break; }
         }
@@ -710,7 +738,9 @@ export function buildNav(md, colliders){
     edges.push([]);
   }
 
-  const _los=(a,b)=>{const dir=V3(b.x-a.x,b.y-a.y,b.z-a.z);const len=dir.length();if(len<1e-4)return true;dir.divideScalar(len);for(const box of colliders)if(rayAABB(a,dir,box,len)<len)return false;return true;};
+  const _los=(a,b)=>{const dir=V3(b.x-a.x,b.y-a.y,b.z-a.z);const len=dir.length();if(len<1e-4)return true;dir.divideScalar(len);
+    const near=query(Math.min(a.x,b.x)-.6,Math.min(a.z,b.z)-.6,Math.max(a.x,b.x)+.6,Math.max(a.z,b.z)+.6);
+    for(const box of near)if(rayAABB(a,dir,box,len)<len)return false;return true;};
   const _edge=(a,b)=>{const dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz)||1,px=-dz/l*.35,pz=dx/l*.35;
     for(const[ox,oz]of[[0,0],[px,pz],[-px,-pz]]){const A=V3(a.x+ox,a.y,a.z+oz),B=V3(b.x+ox,b.y,b.z+oz);if(!_los(A,B))return false;const Al=V3(A.x,a.y-.55,A.z),Bl=V3(B.x,b.y-.55,B.z);if(!_los(Al,Bl))return false;}return true;};
   const nearFloor=(ck,f)=>{
@@ -990,7 +1020,7 @@ export function buildMap(scene, mapId){
 
   // 地面
   const ft0=floorTexture();ft0.repeat.set(24,24);
-  const floor=new THREE.Mesh(new THREE.BoxGeometry(84,1,84),new THREE.MeshStandardMaterial({map:ft0,color:0xbfc8cd,roughness:.92,metalness:.05}));
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(WORLD,1,WORLD),new THREE.MeshStandardMaterial({map:ft0,color:0xbfc8cd,roughness:.92,metalness:.05}));
   floor.position.y=-.5;floor.receiveShadow=true;scene.add(floor);
 
   // 开放区域着色 + 边界线
@@ -1071,6 +1101,29 @@ export function buildMap(scene, mapId){
 
   // 周围环境装饰（地图边界外：城镇建筑、树木、远山）
   addEnvironment(scene, md);
+
+  // ---- 美术：包点发光标记环 + 要道街灯（发光头，无实时光源开销） ----
+  {
+    for(const k of Object.keys(md.sites)){
+      const pl = md.sites[k].plant;
+      const glowMat = new THREE.MeshBasicMaterial({color:md.accent, transparent:true, opacity:.4, side:THREE.DoubleSide, depthWrite:false});
+      const ring1 = new THREE.Mesh(new THREE.RingGeometry(1.5,1.75,36), glowMat);
+      ring1.rotation.x = -Math.PI/2; ring1.position.set(pl[0], .07, pl[1]);
+      const ring2 = new THREE.Mesh(new THREE.RingGeometry(.4,.55,24), glowMat);
+      ring2.rotation.x = -Math.PI/2; ring2.position.set(pl[0], .07, pl[1]);
+      scene.add(ring1, ring2);
+    }
+    const poleMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.7});
+    const lampMat = new THREE.MeshBasicMaterial({color:0xffe9b8});
+    for(const k of Object.keys(md.chokes||{})){
+      const c = md.chokes[k];
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,3.4,6), poleMat);
+      pole.position.set(c[0]+1.2, 1.7, c[1]+1.2);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(.5,.16,.24), lampMat);
+      head.position.set(c[0]+1.2, 3.4, c[1]+1.2);
+      scene.add(pole, head);
+    }
+  }
 
   G.colliders = colliders;
 

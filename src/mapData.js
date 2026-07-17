@@ -395,6 +395,8 @@ function spawnSets(){
     corridor([[25,-31],[25,-28]],3),                        // 防守→A
     corridor([[-25,-31],[-25,-28]],3),                      // 防守→B
     corridor([[0,-31],[0,-24]],2.8),                        // 防守→运河南
+    corridor([[33,10],[36,10],[36,-9],[32,-9],[32,-12.5]],2),    // 东缘飞架（A 第三路）
+    corridor([[-33,10],[-36,10],[-36,-9],[-32,-9],[-32,-12.5]],2), // 西缘飞架（B 第三路）
   ];
   const bridges=[
     [-11.5,1.5,11.5,5.5,2.6],   // 高架天桥：横跨运河，连接东西桥头
@@ -852,6 +854,10 @@ function spawnSets(){
     corridor([[6,7],[-6,7]],2.4),                            // 中枢横廊（中东↔中西）
     corridor([[24,9],[18,9]],2),                             // 东前院↔中东厅
     corridor([[-24,9],[-18,9]],2),                           // 西前院↔中西厅
+    corridor([[35,10],[37.5,10],[37.5,-15],[34,-15]],2),     // 东缘栈巷（A 第二路）
+    corridor([[-35,10],[-37.5,10],[-37.5,-15],[-34,-15]],2), // 西缘栈巷（D 第二路）
+    corridor([[16,3],[16,-13.5]],1.8),                       // B 东侧门（B 第二路）
+    corridor([[-16,3],[-16,-13.5]],1.8),                     // C 西侧门（C 第二路）
   ];
   const platforms=[
     [32,-26,36,-20,2.2],   // A 高台
@@ -914,10 +920,10 @@ function spawnSets(){
     spawns:spawnSets(),
     barriers:[
       {rect:[-39,28.5,39,30.5], side:'atk'},
-      {rect:[29.5,-13.6,36.5,-12.8], side:'def'},
-      {rect:[7.5,-13.6,14.5,-12.8], side:'def'},
-      {rect:[-14.5,-13.6,-7.5,-12.8], side:'def'},
-      {rect:[-36.5,-13.6,-29.5,-12.8], side:'def'},
+      {rect:[29.5,-13.6,39.6,-12.8], side:'def'},
+      {rect:[7.5,-13.6,18.4,-12.8], side:'def'},
+      {rect:[-18.4,-13.6,-7.5,-12.8], side:'def'},
+      {rect:[-39.6,-13.6,-29.5,-12.8], side:'def'},
     ],
   }));
 })();
@@ -951,6 +957,7 @@ function spawnSets(){
     corridor([[20,-32],[20,-26]],3),                          // 码头→A
     corridor([[-8,2],[-12,2]],2),                             // 广场↔索道口
     corridor([[8,2],[12,2],[12,4]],2),                        // 广场↔上城街
+    corridor([[-25,6],[-29,6],[-29,-2],[-27.5,-2],[-27.5,-8.2]],2), // 索道西崖小道（B 第三路）
   ];
   const platforms=[
     [26,-26,34,-16,2.2],   // A 上城高台（吊脚楼台）
@@ -1014,11 +1021,46 @@ function spawnSets(){
     barriers:[
       {rect:[-39,28.5,39,30.5], side:'atk'},
       {rect:[20.5,-10.6,34.5,-9.8], side:'def'},
-      {rect:[-26.5,-8.9,-17.5,-8.1], side:'def'},
+      {rect:[-30.5,-8.9,-17.5,-8.1], side:'def'},
       {rect:[-7.1,-13.6,3.1,-12.8], side:'def'},
     ],
   }));
 })();
 
+// ============================================================
+// 全地图等比放大：世界 84x84 → 110x110（高度不变），路线更长更有纵深
+// ============================================================
+const K = 1.3;
+const sc = v => Math.round(v * K * 100) / 100;
+for(const m of MAPS){
+  for(const r of m.open){ r[0]=sc(r[0]); r[1]=sc(r[1]); r[2]=sc(r[2]); r[3]=sc(r[3]); }
+  for(const w of m.innerWalls){ w[0]=sc(w[0]); w[1]=sc(w[1]); w[2]=sc(w[2]); w[3]=sc(w[3]); }
+  for(const r of m.roofs){ r[0]=sc(r[0]); r[1]=sc(r[1]); r[2]=sc(r[2]); r[3]=sc(r[3]); }
+  for(const p of m.platforms){ p[0]=sc(p[0]); p[1]=sc(p[1]); p[2]=sc(p[2]); p[3]=sc(p[3]); }
+  for(const b of m.bridges){ b[0]=sc(b[0]); b[1]=sc(b[1]); b[2]=sc(b[2]); b[3]=sc(b[3]); }
+  for(const st of m.stairs){ st.x1=sc(st.x1); st.z1=sc(st.z1); st.x2=sc(st.x2); st.z2=sc(st.z2); }
+  for(const c of m.crates){ c[0]=sc(c[0]); c[1]=sc(c[1]); }
+  for(const k of Object.keys(m.sites)){
+    const st=m.sites[k];
+    st.rect=[sc(st.rect[0]),sc(st.rect[1]),sc(st.rect[2]),sc(st.rect[3])];
+    st.plant=[sc(st.plant[0]),sc(st.plant[1])];
+  }
+  for(const b of m.barriers){
+    b.rect=[sc(b.rect[0]),sc(b.rect[1]),sc(b.rect[2]),sc(b.rect[3])];
+    // 缩放后厚度方向外扩 0.5m：防止光幕带与 1m 导航格网错位产生缝隙
+    const w=b.rect[2]-b.rect[0], d=b.rect[3]-b.rect[1];
+    if(w<d){ b.rect[0]-=.5; b.rect[2]+=.5; } else { b.rect[1]-=.5; b.rect[3]+=.5; }
+  }
+  for(const k of Object.keys(m.stages||{})) m.stages[k]=[sc(m.stages[k][0]),sc(m.stages[k][1])];
+  for(const p of m.defPostList){ p.p=[sc(p.p[0]),sc(p.p[1])]; p.look=[sc(p.look[0]),sc(p.look[1])]; }
+  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]){ h.p=[sc(h.p[0]),sc(h.p[1])]; h.look=[sc(h.look[0]),sc(h.look[1])]; }
+  for(const k of Object.keys(m.smokePoints||{})) m.smokePoints[k]=m.smokePoints[k].map(pt=>[sc(pt[0]),sc(pt[1])]);
+  for(const k of Object.keys(m.chokes||{})) m.chokes[k]=[sc(m.chokes[k][0]),sc(m.chokes[k][1])];
+  m.spawns.atk = m.spawns.atk.map(p=>[sc(p[0]),sc(p[1])]);
+  m.spawns.def = m.spawns.def.map(p=>[sc(p[0]),sc(p[1])]);
+  m.sky.fogFar = Math.round(m.sky.fogFar * 1.3);
+}
+
+export const WORLD = 110;
 export { MAPS };
 export default MAPS;

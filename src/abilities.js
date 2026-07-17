@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=16';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=16';
-import { AGENTS } from './config.js?v=16';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh } from './effects.js?v=16';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=16';
-import { inAnyOpen } from './map.js?v=16';
-import { sfx } from './audio.js?v=16';
-import { raySphere } from './utils.js?v=16';
+import { G } from './state.js?v=17';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp } from './utils.js?v=17';
+import { AGENTS } from './config.js?v=17';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=17';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=17';
+import { inAnyOpen } from './map.js?v=17';
+import { sfx } from './audio.js?v=17';
+import { raySphere } from './utils.js?v=17';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -286,6 +286,12 @@ export function useAbility(ent, key){
   if(!g) return false;
   return finishAbility(ent, key, g.slot, performAbility(ent, key, g.slot, g.def, {}));
 }
+
+// 投掷参数表（速度/上抛）——供投掷轨迹预览使用
+export const THROW_PARAMS = {
+  smokeProj:[15,3], flash:[19,3], molly:[17,4], slowProj:[15,3.5], shock:[20,3], recon:[24,2],
+  nade:[17,3.5], bignade:[16,4], fragNade:[17,3.5], acidPool:[15,3], suppressNade:[16,3],
+};
 
 // ===== 装备式施法（复刻无畏契约：按技能键持在手上，左键释放/右键低抛或取消） =====
 const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade']);
@@ -762,7 +768,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=16').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=17').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -807,6 +813,7 @@ export function sellAbility(ent, key){
 export function updateProjectiles(dt){
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
+    if(!p.mesh) attachProjectileVisual(p);
     p.vel.y -= (p.type==='rocket' ? 2.5 : 14)*dt;
     const step = p.vel.length()*dt;
     const dir = p.vel.clone().normalize();
@@ -858,7 +865,10 @@ export function updateProjectiles(dt){
           break;
         case 'suppress': popSuppress(p.pos.clone().setY(Math.max(.8,p.pos.y)), 5.5, 5, p.owner); break;
       }
+      removeProjectileVisual(p);
       G.projectiles.splice(i,1);
+    } else {
+      updateProjectileVisual(p, dt);
     }
   }
 }

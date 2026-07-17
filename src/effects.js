@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=16';
-import { V3 } from './utils.js?v=16';
-import { sfx } from './audio.js?v=16';
+import { G } from './state.js?v=17';
+import { V3 } from './utils.js?v=17';
+import { sfx } from './audio.js?v=17';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -145,6 +145,47 @@ export function spawnTrap(pos, yaw, ent){
   const tr = { pos:pos.clone(), team:ent.team, owner:ent, mesh:g, until:G.now+90 };
   G.traps.push(tr);
   return tr;
+}
+
+// ---- 投掷物可视化：发光弹体 + 拖尾轨迹 ----
+const projColors = { smoke:0xbfc9d8, flash:0xffe9a0, molly:0xff7a30, slow:0x7fd0ff, shock:0x8fd3ff,
+  recon:0x39d0c9, nade:0xff9a3d, bignade:0xff7a30, frag:0x9fb4ff, acid:0x59d97f, suppress:0xb478ff, rocket:0xffd070 };
+const TRAIL_N = 16;
+export function attachProjectileVisual(p){
+  const col = projColors[p.type] ?? 0xffffff;
+  const big = p.type==='rocket';
+  const core = new THREE.Mesh(new THREE.SphereGeometry(big?.17:.11, 10, 8),
+    new THREE.MeshStandardMaterial({color:col, emissive:col, emissiveIntensity:1.1, roughness:.3}));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(big?.3:.2, 8, 6),
+    new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.22, blending:THREE.AdditiveBlending, depthWrite:false}));
+  const g = new THREE.Group();
+  g.add(core, halo);
+  g.position.copy(p.pos);
+  scene.add(g);
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N*3), 3));
+  const trail = new THREE.Line(trailGeo,
+    new THREE.LineBasicMaterial({color:col, transparent:true, opacity:.6, blending:THREE.AdditiveBlending, depthWrite:false}));
+  trail.frustumCulled = false;
+  scene.add(trail);
+  p.mesh = g; p.trail = trail; p.trailPts = [];
+}
+export function updateProjectileVisual(p, dt){
+  if(!p.mesh) return;
+  p.mesh.position.copy(p.pos);
+  p.mesh.rotation.y += dt*7; p.mesh.rotation.x += dt*5;
+  p.trailPts.push(p.pos.clone());
+  if(p.trailPts.length > TRAIL_N) p.trailPts.shift();
+  const a = p.trail.geometry.attributes.position.array;
+  for(let i=0;i<TRAIL_N;i++){
+    const q = p.trailPts[Math.min(i, p.trailPts.length-1)] || p.pos;
+    a[i*3]=q.x; a[i*3+1]=q.y; a[i*3+2]=q.z;
+  }
+  p.trail.geometry.attributes.position.needsUpdate = true;
+}
+export function removeProjectileVisual(p){
+  if(p.mesh){ scene.remove(p.mesh); p.mesh = null; }
+  if(p.trail){ scene.remove(p.trail); p.trail = null; }
 }
 
 // ---- 掉落武器 ----
@@ -302,6 +343,8 @@ export function clearRoundFX(){
   G.traps.length = 0;
   for(const d of G.drops) if(d.mesh) scene.remove(d.mesh);
   G.drops.length = 0;
+  for(const p of G.projectiles) removeProjectileVisual(p);
+  G.projectiles.length = 0;
 }
 export function removeMesh(m){ if(m) scene.remove(m); }
 export function addMesh(m){ scene.add(m); }

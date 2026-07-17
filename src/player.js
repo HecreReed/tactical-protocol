@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=16';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=16';
-import { SKINS, AGENTS } from './config.js?v=16';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=16';
-import { useAbility, startCast, confirmCast, cancelCast } from './abilities.js?v=16';
-import { tracer, spawnSmoke } from './effects.js?v=16';
-import { sfx } from './audio.js?v=16';
+import { G, sens } from './state.js?v=17';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=17';
+import { SKINS, AGENTS } from './config.js?v=17';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=17';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=17';
+import { tracer, spawnSmoke } from './effects.js?v=17';
+import { sfx } from './audio.js?v=17';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -111,9 +111,49 @@ function ensureCastRing(){
   G.scene.add(castRing);
   return castRing;
 }
-function hideCastRing(){ if(castRing) castRing.visible = false; }
+const ARC_N = 48;
+let castArc = null;
+function ensureCastArc(){
+  if(castArc) return castArc;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_N*3), 3));
+  castArc = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color:0x39d0c9, transparent:true, opacity:.8, blending:THREE.AdditiveBlending, depthWrite:false }));
+  castArc.frustumCulled = false;
+  castArc.visible = false;
+  G.scene.add(castArc);
+  return castArc;
+}
+function hideCastArc(){ if(castArc) castArc.visible = false; }
+function updateCastArc(p, cm, alt=false){
+  const prm = THROW_PARAMS[cm.def.type];
+  if(!prm){ hideCastArc(); return; }
+  const arc = ensureCastArc();
+  const speed = alt ? 7 : prm[0], up = alt ? 2.2 : prm[1];
+  const dir = dirFromYawPitch(p.yaw, p.pitch);
+  const pos = eyePos(p).addScaledVector(dir, .6);
+  const vel = dir.clone().multiplyScalar(speed).add(V3(0, up, 0));
+  const a = arc.geometry.attributes.position.array;
+  const DT = .05;
+  let n = 0;
+  for(let i=0;i<ARC_N;i++){
+    a[i*3]=pos.x; a[i*3+1]=pos.y; a[i*3+2]=pos.z;
+    n = i+1;
+    vel.y -= 14*DT;
+    const step = vel.length()*DT;
+    const d = vel.clone().normalize();
+    if(rayWalls(pos, d, step + .1) <= step){ break; }
+    pos.addScaledVector(d, step);
+    if(pos.y <= .15) break;
+  }
+  for(let i=n;i<ARC_N;i++){ a[i*3]=pos.x; a[i*3+1]=pos.y; a[i*3+2]=pos.z; }
+  arc.geometry.attributes.position.needsUpdate = true;
+  arc.visible = true;
+}
+function hideCastRing(){ if(castRing) castRing.visible = false; hideCastArc(); }
 function updateCastRing(p, cm){
-  if(cm.kind !== 'aim'){ hideCastRing(); return; }
+  if(cm.kind !== 'aim'){ hideCastRing(); updateCastArc(p, cm, false); return; }
+  hideCastArc();
   const ring = ensureCastRing();
   const t = cm.def.type;
   const dir = dirFromYawPitch(p.yaw, p.pitch);
@@ -419,8 +459,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=16';
-import { raySphere } from './utils.js?v=16';
+import { hitSpheres } from './combat.js?v=17';
+import { raySphere } from './utils.js?v=17';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

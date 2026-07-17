@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=16';
-import { buildMap } from './map.js?v=16';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=16';
-import { initAudio } from './audio.js?v=16';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=16';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=16';
-import { updateBots } from './bots.js?v=16';
-import { startMatch, updateGame } from './game.js?v=16';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=16';
+import { G } from './state.js?v=17';
+import { buildMap } from './map.js?v=17';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=17';
+import { initAudio } from './audio.js?v=17';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=17';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=17';
+import { updateBots } from './bots.js?v=17';
+import { startMatch, updateGame } from './game.js?v=17';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=17';
 
 let started = false;
 let sun = null;
@@ -52,9 +52,9 @@ function buildLights(md){
   sun = new THREE.DirectionalLight(md.sky.sun, 2.2);
   sun.position.set(md.sky.sunPos[0], md.sky.sunPos[1], md.sky.sunPos[2]);
   sun.castShadow = true;
-  sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
-  sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
-  sun.shadow.camera.near = 10; sun.shadow.camera.far = 220;
+  sun.shadow.camera.left = -78; sun.shadow.camera.right = 78;
+  sun.shadow.camera.top = 78; sun.shadow.camera.bottom = -78;
+  sun.shadow.camera.near = 10; sun.shadow.camera.far = 280;
   sun.shadow.bias = -0.00045;
   sun.shadow.normalBias = 0.02;
   G.scene.add(sun);

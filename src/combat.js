@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=16';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=16';
-import { WIDE } from './config.js?v=16';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=16';
-import { sfx } from './audio.js?v=16';
+import { G } from './state.js?v=17';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=17';
+import { WIDE } from './config.js?v=17';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=17';
+import { sfx } from './audio.js?v=17';
 
 let nextId = 1;
 
@@ -119,8 +119,8 @@ export function moveEntity(ent, dt){
     ent.grounded = true;
   } else ent.grounded = p.y - floorY < .05;
   // bounds safety
-  p.x = clamp(p.x, -39.5, 39.5);
-  p.z = clamp(p.z, -39.5, 39.5);
+  p.x = clamp(p.x, -54.5, 54.5);
+  p.z = clamp(p.z, -54.5, 54.5);
 }
 
 // ---------- hitboxes ----------
@@ -327,7 +327,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=16';
+import { AGENTS } from './config.js?v=17';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
