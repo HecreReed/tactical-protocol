@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=10';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=10';
-import { WIDE } from './config.js?v=10';
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=10';
-import { sfx } from './audio.js?v=10';
+import { G } from './state.js?v=11';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=11';
+import { WIDE } from './config.js?v=11';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh } from './effects.js?v=11';
+import { sfx } from './audio.js?v=11';
 
 let nextId = 1;
 
@@ -279,7 +279,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=10';
+import { AGENTS } from './config.js?v=11';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

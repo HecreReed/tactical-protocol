@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=10";
-import { V3, rayAABB, dist2d } from "./utils.js?v=10";
-import { MAPS as NEW_MAPS } from "./mapData.js?v=10";
+import { G } from "./state.js?v=11";
+import { V3, rayAABB, dist2d } from "./utils.js?v=11";
+import { MAPS as NEW_MAPS } from "./mapData.js?v=11";
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -694,9 +694,13 @@ export function buildNav(md, colliders){
   for(const [key,c] of cells){
     const i=idx.get(key);
     const [ix,iz]=key.split(',').map(Number);
-    for(const [dx,dz]of[[1,0],[0,1],[-1,0],[0,-1]]){
+    // 四邻（可选）+ 对角线（需两边都通）
+    const dirs = [[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+    for(const [dx,dz] of dirs){
       const k2=`${ix+dx},${iz+dz}`; if(!cells.has(k2)) continue;
       const j=idx.get(k2);
+      // 对角线要求两个相邻正交格也在 cells 内（安全条件）
+      if(dx!==0 && dz!==0 && (!cells.has(`${ix+dx},${iz}`) || !cells.has(`${ix},${iz+dz}`))) continue;
       if(edges[i].includes(j)) continue;
       const c2=cells.get(k2);
       if(!_edge(V3(c.x,1.1,c.z),V3(c2.x,1.1,c2.z))) continue;
@@ -1078,7 +1082,7 @@ export function nearestWp(pos){
   return best;
 }
 // 路径线段是否畅通（带玩家半径余量，检查静态和动态碰撞体）
-export function pathClear(a,b, margin=.35){
+export function pathClear(a,b, margin=.45){
   const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
   const len = Math.hypot(dx,dy,dz); if(len<1e-4) return true;
   const l2 = Math.hypot(dx,dz)||1;
@@ -1097,19 +1101,51 @@ export function pathClear(a,b, margin=.35){
   return true;
 }
 
-function smoothPath(indices){
-  // 暂时关闭平滑，避免直线切过薄墙导致 BOT 撞墙卡死
-  return indices;
+// ---- A* pathfinding with diagonal edges ----
+function heappush(h, id, f){
+  let i = h.length; h.push({id, f});
+  while(i>0){ const p=(i-1)>>1; if(h[p].f <= f) break; h[i]=h[p]; i=p; }
+  h[i] = {id, f};
 }
-
-export function findPath(fromPos,toPos){
-  const a=nearestWp(fromPos), b=nearestWp(toPos);
-  const {wps,edges}=G.map;
+function heappop(h){
+  if(h.length===1) return h.pop();
+  const r=h[0]; const last=h.pop();
+  let i=0, n=h.length;
+  while(true){
+    let sm=i, l=i*2+1, r=l+1;
+    if(l<n && h[l].f<h[sm].f) sm=l;
+    if(r<n && h[r].f<h[sm].f) sm=r;
+    if(sm===i) break;
+    h[i]=h[sm]; i=sm;
+  }
+  h[i]=last;
+  return r;
+}
+export function findPath(fromPos, toPos, jitter=0){
+  const { wps, edges } = G.map;
+  const a = nearestWp(fromPos), b = nearestWp(toPos);
   if(a===b) return [];
-  const prev=new Array(wps.length).fill(-1), q=[a]; prev[a]=a;
-  while(q.length){ const cur=q.shift(); if(cur===b) break; for(const nx of edges[cur]) if(prev[nx]===-1){ prev[nx]=cur; q.push(nx); } }
-  if(prev[b]===-1) return [];
-  const raw=[]; let c=b; while(c!==a){ raw.push(c); c=prev[c]; } raw.push(a); raw.reverse();
-  const smooth = smoothPath(raw);
-  return smooth.map(i=> wps[i].clone ? wps[i].clone() : V3(wps[i].x,wps[i].y,wps[i].z));
+  const n = wps.length;
+  const c2d = (i,j)=>{ const dx=wps[i].x-wps[j].x, dz=wps[i].z-wps[j].z; return Math.hypot(dx,dz); };
+  const cost = (i,j)=> c2d(i,j) * (Math.abs(wps[i].y-wps[j].y)>.2?1.35:1);
+  const g = new Float32Array(n).fill(Infinity);
+  const cameFrom = new Int32Array(n).fill(-1);
+  g[a] = 0;
+  const open = [];
+  heappush(open, a, c2d(a,b));
+  let found = false;
+  while(open.length){
+    const cur = heappop(open).id ?? heappop(open); // unwrap if stored as object
+    if(cur === b){ found = true; break; }
+    for(const nx of edges[cur]){
+      const tg = g[cur] + cost(cur, nx);
+      if(tg < g[nx]){
+        g[nx] = tg; cameFrom[nx] = cur;
+        heappush(open, nx, tg + c2d(nx, b) * (jitter>0?(.85+Math.random()*jitter):1));
+      }
+    }
+  }
+  if(!found) return [];
+  const raw=[]; let c=b; while(c!==a){ raw.push(c); c=cameFrom[c]; } raw.push(a); raw.reverse();
+  return raw.map(i=> wps[i].clone ? wps[i].clone() : V3(wps[i].x,wps[i].y,wps[i].z));
 }

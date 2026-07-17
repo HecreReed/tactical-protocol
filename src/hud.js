@@ -1,11 +1,11 @@
-import { G, saveSettings } from './state.js?v=10';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=10';
-import { MAPS } from './map.js?v=10';
-import { fmtTime, clamp, dist2d } from './utils.js?v=10';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=10';
-import { tryBuyWeapon, tryBuyArmor, sideOf } from './game.js?v=10';
-import { buyAbility } from './abilities.js?v=10';
-import { sfx, setVolume } from './audio.js?v=10';
+import { G, saveSettings } from './state.js?v=11';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=11';
+import { MAPS } from './map.js?v=11';
+import { fmtTime, clamp, dist2d } from './utils.js?v=11';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=11';
+import { tryBuyWeapon, tryBuyArmor, sideOf } from './game.js?v=11';
+import { buyAbility } from './abilities.js?v=11';
+import { sfx, setVolume } from './audio.js?v=11';
 
 const $ = id => document.getElementById(id);
 let els = {};

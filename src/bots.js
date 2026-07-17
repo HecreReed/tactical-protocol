@@ -1,9 +1,9 @@
-import { G } from './state.js?v=10';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=10';
-import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=10';
-import { findPath, inSite, nearestWp, pathClear } from './map.js?v=10';
-import { useAbility, botCast } from './abilities.js?v=10';
-import { sfx } from './audio.js?v=10';
+import { G } from './state.js?v=11';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=11';
+import { curWeapon, moveSpeed, moveEntity, fireShot, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=11';
+import { findPath, inSite, nearestWp, pathClear } from './map.js?v=11';
+import { useAbility, botCast } from './abilities.js?v=11';
+import { sfx } from './audio.js?v=11';
 
 const THINK_DT = .12;
 
@@ -15,7 +15,7 @@ export function initBotAI(ent, i){
     target: null, reactAt: 0, acqT: 0, lastSeenAt: -9, lastSeenPos: V3(),
     burstLeft: 0, burstPause: 0,
     strafeDir: 1, strafeT: 0,
-    repathT: 0, stuckT: 0, lastPos: V3(), sideUntil: 0, sideDir: 1,
+    repathT: 0, stuckT: 0, lastPos: V3(), sideUntil: 0, sideDir: 1, backUntil: 0, detourT: 0, giveUp: 0,
     role: i, planStartAt: 0, stageAt: 0,
     flags: {}, abGate: 0,
     aimHead: false, rotated: false,
@@ -63,20 +63,20 @@ function findTarget(bot){
 
 function setPath(bot, dest){
   const a = bot.ai;
-  const raw = findPath(bot.pos, dest);
+  const raw = findPath(bot.pos, dest, 0.35);  // slight randomness for varied bot routes
   a.path = raw.length ? raw : [];
   if(raw.length) a.path.push(dest.clone ? dest.clone() : V3(dest.x,0,dest.z));
   a.pathI = 0;
-  a.repathT = G.now + 3;
+  a.repathT = G.now + 2.5;
 }
 
 function lookaheadTarget(bot, path, pathI){
-  const maxSteps = 5, maxD = 6.5;
+  const maxSteps = 8, maxD = 7;
   let best = pathI;
   for(let i = pathI + 1; i < path.length && i <= pathI + maxSteps; i++){
     const wp = path[i];
     if(dist2d(bot.pos, wp) > maxD) break;
-    if(pathClear(bot.pos, wp, .35)) best = i;
+    if(pathClear(bot.pos, wp, .45)) best = i;
   }
   return path[best];
 }
@@ -84,15 +84,20 @@ function lookaheadTarget(bot, path, pathI){
 function followPath(bot, dt, sprint=true){
   const a = bot.ai;
   if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
-
-  // 如果已经越过当前节点且能看见下一段，就推进索引，避免切角后卡住
+  // 如果紧贴第一个路径点则直接推进
+  if(a.pathI===0 && a.path.length>0 && dist2d(bot.pos, a.path[0]) < .55) a.pathI++;
+  // 到达最终节点附近：减速并标记到达
+  if(a.pathI >= a.path.length - 1 && a.goal && dist2d(bot.pos, a.goal) < 1.1){
+    bot.vel.x *= .35; bot.vel.z *= .35; return true;
+  }
+  // 推进已越过的中间节点
   while(a.pathI < a.path.length - 1){
     const cur = a.path[a.pathI], nxt = a.path[a.pathI+1];
     const dx = nxt.x - cur.x, dz = nxt.z - cur.z;
     const len2 = dx*dx + dz*dz;
     if(len2 < 1e-4){ a.pathI++; continue; }
     const t = ((bot.pos.x - cur.x)*dx + (bot.pos.z - cur.z)*dz) / len2;
-    if(t > 0.75 && pathClear(bot.pos, nxt, .35)){ a.pathI++; }
+    if(t > 0.65 && pathClear(bot.pos, nxt, .45)){ a.pathI++; }
     else break;
   }
   if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
@@ -103,12 +108,20 @@ function followPath(bot, dt, sprint=true){
     bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*8);
     bot.pitch *= (1 - dt*4);
   }
-  const spd = moveSpeed(bot) * (sprint?1:.55);
+  let spd = moveSpeed(bot) * (sprint?1:.55);
+  // 离最终目标很近时减速
+  if(a.pathI >= a.path.length-1 && a.goal){
+    spd *= Math.min(1, dist2d(bot.pos, a.goal)*.35);
+  }
   const dx = wp.x - bot.pos.x, dz = wp.z - bot.pos.z;
   const l = Math.hypot(dx,dz)||1;
   let mx = dx/l, mz = dz/l;
 
-  // 卡死恢复侧移：沿着面朝方向左右平移，并实时检测侧向空间
+  // 后撤脱困：先反向移动一小段再侧移
+  if(a.backUntil && G.now < a.backUntil){
+    bot.vel.x = -mx * spd*.7; bot.vel.z = -mz * spd*.7; return false;
+  }
+  // 侧向脱困
   if(a.sideUntil && G.now < a.sideUntil){
     const rightX = Math.cos(bot.yaw), rightZ = -Math.sin(bot.yaw);
     const sideX = rightX * a.sideDir, sideZ = rightZ * a.sideDir;
@@ -119,14 +132,14 @@ function followPath(bot, dt, sprint=true){
     return false;
   }
 
-  // 前方障碍探测与绕障
+  // 前方障碍探测与绕障 / 跳跃
   const feet = V3(bot.pos.x, bot.pos.y+.7, bot.pos.z);
   const fwd = V3(mx,0,mz);
   const aheadD = rayWalls(feet, fwd, 1.5);
   if(aheadD < 1.2){
     const high = rayWalls(V3(bot.pos.x, bot.pos.y+1.35, bot.pos.z), fwd, 1.7);
     if(high > 1.5 && bot.grounded && aheadD < 1.0){
-      bot.vel.y = 5.2; bot.grounded = false;
+      bot.vel.y = 5.6; bot.grounded = false;
     } else if(high <= 1.5){
       const leftX = -mz, leftZ = mx;
       const rightX = mz, rightZ = -mx;
@@ -138,10 +151,14 @@ function followPath(bot, dt, sprint=true){
         mx = mx*.35 + sx*.85; mz = mz*.35 + sz*.85;
         const n = Math.hypot(mx,mz); mx/=n; mz/=n;
       } else {
-        // 两侧都堵：减速等待路径转向或触发卡死恢复
-        mx *= .25; mz *= .25;
+        mx *= .15; mz *= .15;  // 两侧全堵：极慢爬行，等待卡死检测接管
       }
     }
+  }
+
+  // 减速到目标周围时进一步减速（防止在 hold 位抖动）
+  if(a.pathI >= a.path.length-1 && a.goal && dist2d(bot.pos, a.goal) < 1.8){
+    spd *= Math.min(1, dist2d(bot.pos, a.goal)*.5);
   }
 
   bot.vel.x = mx * spd;
@@ -162,39 +179,46 @@ function stuckCheck(bot, dt){
   const moved = dist2d(bot.pos, a.lastPos);
   a.lastPos.copy(bot.pos);
 
-  // 同时观察朝向目标的整体推进，避免贴墙蹭动被误判为正常
   let progress = 0;
   if(a.goal){
     const gd = dist2d(bot.pos, a.goal);
-    progress = (a.lastGoalDist || gd) - gd;
+    progress = (a.lastGoalDist||gd) - gd;
     a.lastGoalDist = gd;
   }
 
   if(intent && moved < .03 && progress < .02){
     a.stuckT += dt;
-    if(a.stuckT > .5 && (!a.sideUntil || G.now > a.sideUntil + .4)){
-      // 选择侧向空间更大的一边
+    // 分级脱困
+    if(a.stuckT > .4 && (!a.sideUntil || G.now > a.sideUntil + .4)){
       const rightX = Math.cos(bot.yaw), rightZ = -Math.sin(bot.yaw);
       const leftD = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z), V3(-rightX,0,-rightZ), 1.2);
       const rightD = rayWalls(V3(bot.pos.x, bot.pos.y+.7, bot.pos.z), V3(rightX,0,rightZ), 1.2);
       a.sideDir = leftD > rightD ? -1 : 1;
       a.sideUntil = G.now + .6;
     }
-    if(a.stuckT > 1.2 && a.goal){
-      setPath(bot, a.goal);
-      a.stuckT = .6;
+    if(a.stuckT > 1.0 && !a.backUntil && !a.sideUntil){
+      a.backUntil = G.now + .45; // 先反向退
     }
-    if(a.stuckT > 2.5 && !a.target){
-      // 兜底：拉回最近可达导航点（水平面），杜绝卡进墙体
+    if(a.stuckT > 1.8 && a.goal){
+      a.detourT = G.now;
+      setPath(bot, a.goal);       // 重寻路（jitter 加持）
+      a.stuckT = 1.0;
+    }
+    if(a.stuckT > 3.5 && !a.target){
       const w = G.map.wps[nearestWp(bot.pos)];
-      bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(bot.pos.y, w.y - 1.1);
-      bot.vel.set(0,0,0);
-      a.stuckT = 0; a.sideUntil = 0; a.lastGoalDist = undefined;
+      bot.pos.x = w.x; bot.pos.z = w.z; bot.vel.set(0,0,0);
+      a.stuckT = 0; a.sideUntil = 0; a.backUntil = 0; a.lastGoalDist = undefined;
       if(a.goal) setPath(bot, a.goal);
     }
+    // 放弃无望目标
+    if(a.stuckT > 6.5 && !a.target){
+      a.giveUp = (a.giveUp||0) + 1;
+      if(a.giveUp > 2){ a.goal = null; a.state = 'wait'; a.giveUp = 0; }
+      a.stuckT = 0;
+    }
   } else if(moved > .05 || progress > .04){
-    a.stuckT = Math.max(0, a.stuckT - dt*2.5);
-    if(a.stuckT <= 0){ a.stuckT = 0; a.sideUntil = 0; }
+    a.stuckT = Math.max(0, a.stuckT - dt*2.8);
+    if(a.stuckT <= 0){ a.stuckT = 0; a.sideUntil = 0; a.backUntil = 0; a.giveUp = 0; }
   }
 }
 
@@ -259,11 +283,10 @@ function combatUpdate(bot, dt){
   a.strafeT -= dt;
   if(a.strafeT <= 0){
     a.strafeT = rand(.35, .7);
-    // 优先尝试有空间的左右，都不行就原地站定
     const px = Math.cos(bot.yaw), pz = -Math.sin(bot.yaw);
-    const eye = eyePos(bot);
-    const leftD = rayWalls(eye, V3(-px,0,-pz), 1.2);
-    const rightD = rayWalls(eye, V3(px,0,pz), 1.2);
+    const feetCheck = V3(bot.pos.x, bot.pos.y+.6, bot.pos.z);
+    const leftD = rayWalls(feetCheck, V3(-px,0,-pz), 1.2);
+    const rightD = rayWalls(feetCheck, V3(px,0,pz), 1.2);
     const order = Math.random() < .5 ? [-1, 1, 0] : [1, -1, 0];
     a.strafeDir = 0;
     for(const dir of order){
@@ -474,6 +497,22 @@ function buyWander(bot, dt){
   }
 }
 
+// ---------- bot 间分离力（防止叠在一起互堵门） ----------
+function separateBots(){
+  for(let i=0;i<G.ents.length;i++){
+    const a=G.ents[i]; if(a.isPlayer || !a.alive || !a.ai) continue;
+    for(let j=i+1;j<G.ents.length;j++){
+      const b=G.ents[j]; if(b.isPlayer || !b.alive || !b.ai) continue;
+      const dx=a.pos.x-b.pos.x, dz=a.pos.z-b.pos.z, d=Math.hypot(dx,dz)||.01;
+      if(d < .85){
+        const push = (.85-d)*1.2;
+        a.vel.x += dx/d*push; a.vel.z += dz/d*push;
+        b.vel.x -= dx/d*push; b.vel.z -= dz/d*push;
+      }
+    }
+  }
+}
+
 // ---------- 主循环 ----------
 export function updateBots(dt){
   const m = G.match;
@@ -512,6 +551,7 @@ export function updateBots(dt){
     if(a.target && a.target.alive) combatUpdate(bot, dt);
     else { bot.crouch = false; navUpdate(bot, dt); }
 
+    separateBots();
     moveEntity(bot, dt);
     stuckCheck(bot, dt);
     updateBodyPose(bot);

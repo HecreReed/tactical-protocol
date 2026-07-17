@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=10';
-import { buildMap } from './map.js?v=10';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=10';
-import { initAudio } from './audio.js?v=10';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=10';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=10';
-import { updateBots } from './bots.js?v=10';
-import { startMatch, updateGame } from './game.js?v=10';
-import { updateProjectiles, tickHealAndZones } from './abilities.js?v=10';
+import { G } from './state.js?v=11';
+import { buildMap } from './map.js?v=11';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=11';
+import { initAudio } from './audio.js?v=11';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=11';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=11';
+import { updateBots } from './bots.js?v=11';
+import { startMatch, updateGame } from './game.js?v=11';
+import { updateProjectiles, tickHealAndZones } from './abilities.js?v=11';
 
 let started = false;
 let sun = null;
