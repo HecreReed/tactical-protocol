@@ -1,3 +1,5 @@
+import { createUtilityStore } from './abilityRuntime.js';
+
 const saved = (()=>{ try { return JSON.parse(localStorage.getItem('tp_settings_v2')||'{}'); } catch { return {}; } })();
 
 export const G = {
@@ -17,6 +19,8 @@ export const G = {
   corpses: [],
   projectiles: [],
   abilityEvents: [],   // deterministic delayed effects, advanced by the game clock
+  utilities: createUtilityStore(),
+  controlMode: null,
   map: null,
   match: null,
   keys: {},

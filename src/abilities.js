@@ -8,6 +8,7 @@ import { inAnyOpen, colQuery } from './map.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { raySphere } from './utils.js?v=28';
 import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
+import { interceptProjectile, tickUtilities } from './abilityRuntime.js';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -1100,8 +1101,12 @@ function stepBouncy(p, dt){
 
 export function updateProjectiles(dt){
   runAbilityEvents(G.abilityEvents, G.now);
+  tickUtilities(G.utilities, G.now);
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
+    if(interceptProjectile(G.utilities, { ...p, team:p.owner?.team, interceptable:p.interceptable!==false })){
+      removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
+    }
     if(!p.mesh) attachProjectileVisual(p);
     if(p.type==='drone'){
       // 侦察机：无重力直线巡航，周期性扫描显形

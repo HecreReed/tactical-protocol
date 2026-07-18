@@ -7,6 +7,7 @@ import { colQuery } from './map.js?v=28';
 const LIM = WORLD/2 - .5;
 import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=28';
 import { sfx } from './audio.js?v=28';
+import { damageUtility } from './abilityRuntime.js';
 
 let nextId = 1;
 
@@ -293,7 +294,10 @@ export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
     }
     if(tHit){
       end = V3().copy(origin).addScaledVector(dir, tHit.d);
-      tHit.t.hp -= 34;
+      if(tHit.t.utility){
+        damageUtility(G.utilities, tHit.t.utility.id, 34, shooter.team);
+        tHit.t.hp = Math.max(0, tHit.t.utility.hp);
+      } else tHit.t.hp -= 34;
       impactFX(end);
       tracer(V3().copy(origin).addScaledVector(dir, 1.2).addScaledVector(right, shooter.isPlayer?.12:0), end, tracerColor);
       if(shooter.isPlayer) G.hooks.hitmarker?.(false, false);

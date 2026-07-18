@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { G } from './state.js?v=28';
 import { V3 } from './utils.js?v=28';
 import { sfx } from './audio.js?v=28';
+import { registerUtility } from './abilityRuntime.js';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -123,6 +124,7 @@ export function spawnTurret(pos, yaw, ent){
   g.position.copy(pos); g.rotation.y = yaw;
   scene.add(g);
   const t = { pos:pos.clone(), yaw, team:ent.team, owner:ent, hp:125, nextFire:0, mesh:g, lamp:eye, until:G.now+45 };
+  t.utility = registerUtility(G.utilities, { type:'turret', team:ent.team, ownerId:ent.id, hp:t.hp, pos:t.pos, until:t.until, recallable:true, source:t, onDestroy:()=>{ t.hp=0; } });
   G.turrets.push(t);
   sfx.wall(G.player? pos.distanceTo(G.player.pos):0);
   return t;
@@ -143,6 +145,7 @@ export function spawnTrap(pos, yaw, ent){
   g.position.copy(pos); g.rotation.y = yaw;
   scene.add(g);
   const tr = { pos:pos.clone(), team:ent.team, owner:ent, mesh:g, until:G.now+90 };
+  tr.utility = registerUtility(G.utilities, { type:'trapwire', team:ent.team, ownerId:ent.id, hp:20, pos:tr.pos, until:tr.until, recallable:true, source:tr });
   G.traps.push(tr);
   return tr;
 }
@@ -277,6 +280,8 @@ export function spawnDevice(type, pos, ent, opts={}){
   scene.add(g);
   const d = { type, pos:pos.clone(), team:ent.team, owner:ent, mesh:g, lamp, ring,
     until: opts.until ?? (G.now+60), armAt: opts.armAt ?? 0, r: opts.r ?? 3, tick: 0 };
+  const hp = type==='lockdown' ? 200 : type==='beacon' ? 100 : 20;
+  d.utility = registerUtility(G.utilities, { type, team:ent.team, ownerId:ent.id, hp, pos:d.pos, until:d.until, radius:d.r, recallable:type==='alarm', source:d });
   G.traps.push(d);
   sfx.wall(G.player ? pos.distanceTo(G.player.pos) : 0);
   return d;
@@ -413,6 +418,9 @@ export function clearRoundFX(){
   G.drops.length = 0;
   for(const p of G.projectiles) removeProjectileVisual(p);
   G.projectiles.length = 0;
+  G.utilities.items.length = 0;
+  G.utilities.nextId = 1;
+  G.controlMode = null;
 }
 export function removeMesh(m){ if(m) scene.remove(m); }
 export function addMesh(m){ scene.add(m); }
