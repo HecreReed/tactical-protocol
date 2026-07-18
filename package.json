@@ -8,6 +8,7 @@
     "test": "node --test",
     "sync:agents": "node tools/sync_agents.mjs",
     "smoke": "node tools/smoke_game.mjs",
+    "simulate": "node tools/simulate_bots.mjs",
     "validate": "node --input-type=module -e \"import {validateMaps} from './src/map.js'; console.log(JSON.stringify(validateMaps(),null,2))\""
   },
   "dependencies": {

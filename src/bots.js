@@ -28,7 +28,7 @@ export function initBotAI(ent, i){
     aimHead: false, rotated: false,
     routeSeed: i + 1, routeAttempt: 0,
     teamRole: null, lane: null, contactMemory: null, pendingContact: null,
-    disengageUntil: 0, coverGoal: null,
+    disengageUntil: 0, coverGoal: null, pathPending: null,
     state: 'wait',
   };
 }
@@ -47,6 +47,7 @@ export function resetBotRound(ent){
   a.teamRole = assignTeamRole(a.role, sideOf(ent));
   a.lane = null; a.contactMemory = null; a.pendingContact = null;
   a.disengageUntil = 0; a.coverGoal = null;
+  a.pathPending = null;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -167,8 +168,13 @@ let pathBudget = 2;
 function setPath(bot, dest, alternate=false){
   const a = bot.ai;
   // 每帧寻路预算：防止多个 AI 同帧 A* 造成突发卡顿（下一帧自动重试）
-  if(pathBudget <= 0){ a.repathT = G.now + .15; return; }
+  if(pathBudget <= 0){
+    a.pathPending = dest.clone ? dest.clone() : V3(dest.x,dest.y||0,dest.z);
+    a.repathT = G.now + .05;
+    return false;
+  }
   pathBudget--;
+  a.pathPending = null;
   if(alternate) a.routeAttempt = (a.routeAttempt + 1) % 7;
   const routeSeed = a.routeSeed + a.routeAttempt * 31;
   const raw = findPath(bot.pos, dest, routeSeed);
@@ -182,6 +188,7 @@ function setPath(bot, dest, alternate=false){
   a.repathT = G.now + 3.5;
   a.wdBest = Infinity;       // 进度看门狗：最近的最好目标距离
   a.wdAt = G.now;
+  return true;
 }
 
 function lookaheadTarget(bot, path, pathI){
@@ -467,7 +474,8 @@ function combatUpdate(bot, dt){
     else if(w.reserve>0){
       const cover = chooseCoverGoal(bot,t.pos);
       if(cover){
-        a.coverGoal=cover; a.goal=cover; a.state='fallback'; a.disengageUntil=G.now+1.4;
+        a.coverGoal=cover; a.goal=cover; a.state='fallback';
+        a.disengageUntil=G.now+1.4; a.fallbackUntil=G.now+2.4;
         a.target=null; setPath(bot,cover,true); return;
       }
     }
@@ -980,6 +988,7 @@ export function updateBots(dt){
   for(const bot of G.ents){
     if(bot.isPlayer || !bot.alive){ if(!bot.isPlayer) updateBodyPose(bot); continue; }
     const a = bot.ai;
+    if(a.pathPending && pathBudget>0) setPath(bot,a.pathPending);
     if(m.phase==='buy'){
       // 防守方开局立刻前往点位架枪（像真人一样提前就位）；进攻方在天幕内自由活动
       if(sideOf(bot)==='def' && G.map.defPostList?.length){
@@ -1088,7 +1097,7 @@ function think(bot){
     }
   }
   if(!a.target){
-    if(!dest) for(const e of G.ents){
+    for(const e of G.ents){
       if(!e.alive || e.team===bot.team || G.now >= (e.revealedUntil||0)) continue;
       if(dist2d(bot.pos,e.pos) < 40){
         a.contactMemory=updateContactMemory(a.contactMemory,{kind:'sight',pos:e.pos,sourceId:e.id},G.now,D());
@@ -1176,7 +1185,7 @@ function thinkAttack(bot){
     a.state = 'fallback';
     a.fallbackUntil = G.now + rand(3.5, 5.5);
     let dest = chooseCoverGoal(bot,estimatedContact(bot)), bd = Infinity;
-    for(const e of G.ents){
+    if(!dest) for(const e of G.ents){
       if(e===bot || !e.alive || e.team!==bot.team) continue;
       const d = dist2d(e.pos, bot.pos);
       if(d > 6 && d < bd){ bd = d; dest = e.pos.clone(); }
@@ -1322,6 +1331,15 @@ function thinkAttack(bot){
 
 function thinkDefend(bot){
   const a = bot.ai, m = G.match, sp = m.spike;
+
+  if(a.state==='fallback'){
+    if(a.coverGoal && G.now<(a.fallbackUntil||0)){
+      a.goal=a.coverGoal;
+      if(needRepath(bot,a.goal))setPath(bot,a.goal);
+      return;
+    }
+    a.state='post';a.coverGoal=null;a.hold=null;
+  }
 
   if(sp.state==='planted'){
     const defenders = G.ents.filter(e=>e.alive && sideOf(e)==='def' && !e.isPlayer);

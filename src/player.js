@@ -695,10 +695,25 @@ export function updateObserver(dt){
     } else {
       // 第三人称：目标身后上方，看向前方
       const d = 3.2;
-      const tx = t.pos.x - Math.sin(t.yaw)*d;
-      const tz = t.pos.z - Math.cos(t.yaw)*d;
+      const tx = t.pos.x + Math.sin(t.yaw)*d;
+      const tz = t.pos.z + Math.cos(t.yaw)*d;
       const ty = t.pos.y + 2.4;
-      obsPos.lerp(new THREE.Vector3(tx, ty, tz), Math.min(1, dt*6));
+      const focus = new THREE.Vector3(t.pos.x,t.pos.y+1.45,t.pos.z);
+      const desired = new THREE.Vector3(tx,ty,tz);
+      const desiredRay = desired.clone().sub(focus);
+      const desiredLen = desiredRay.length();
+      if(desiredLen>.01){
+        desiredRay.divideScalar(desiredLen);
+        const hit=rayWalls(focus,desiredRay,desiredLen);
+        if(hit<desiredLen) desired.copy(focus).addScaledVector(desiredRay,Math.max(.3,hit-.22));
+      }
+      obsPos.lerp(desired, Math.min(1, dt*6));
+      const currentRay=obsPos.clone().sub(focus),currentLen=currentRay.length();
+      if(currentLen>.01){
+        currentRay.divideScalar(currentLen);
+        const hit=rayWalls(focus,currentRay,currentLen);
+        if(hit<currentLen)obsPos.copy(focus).addScaledVector(currentRay,Math.max(.3,hit-.22));
+      }
       cam.position.copy(obsPos);
       const targetYaw = t.yaw;
       const targetPitch = -0.18;
