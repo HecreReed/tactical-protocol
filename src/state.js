@@ -18,6 +18,7 @@ export const G = {
   lastReport: null,   // 上回合战斗报告（购买阶段显示）
   corpses: [],
   projectiles: [],
+  transientFX: [],    // round-scoped meshes with game-clock expiry
   abilityEvents: [],   // deterministic delayed effects, advanced by the game clock
   utilities: createUtilityStore(),
   controlMode: null,

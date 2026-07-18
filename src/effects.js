@@ -90,13 +90,14 @@ export function spawnZone(type, pos, r, dur, dps, owner){
 
 export function targetRing(pos, r, dur, color=0xff4655, owner=null){
   // 敌方的技能落点指示环不给玩家看（避免地上出现莫名其妙的红圈）
-  if(owner && G.player && owner.team !== G.player.team) return;
+  if(owner && G.player && owner.team !== G.player.team) return null;
   const ring = new THREE.Mesh(new THREE.RingGeometry(r*.9,r,32),
     new THREE.MeshBasicMaterial({color, transparent:true, opacity:.8, side:THREE.DoubleSide, depthWrite:false}));
   ring.rotation.x = -Math.PI/2;
   ring.position.copy(pos).y += .08;
   scene.add(ring);
-  setTimeout(()=>scene.remove(ring), dur*1000);
+  G.transientFX.push({mesh:ring,until:G.now+dur/1000,type:'target-ring'});
+  return ring;
 }
 
 // ---- Killjoy/Cypher：哨戒炮塔 ----
@@ -365,6 +366,12 @@ export function updateFX(dt){
     f.mesh.material.transparent = true;
     if(f.life<=0){ f.active=false; f.mesh.visible=false; f.grow=0; }
   }
+  for(let i=G.transientFX.length-1;i>=0;i--){
+    const fx=G.transientFX[i];
+    if(G.now<fx.until)continue;
+    if(fx.mesh)scene.remove(fx.mesh);
+    G.transientFX.splice(i,1);
+  }
   // smokes
   for(let i=G.smokes.length-1;i>=0;i--){
     const s = G.smokes[i];
@@ -402,6 +409,10 @@ export function updateFX(dt){
 }
 
 export function clearRoundFX(){
+  for(const fx of G.transientFX) if(fx.mesh) scene.remove(fx.mesh);
+  G.transientFX.length = 0;
+  for(const t of pools.tracers){ t.active=false; t.life=0; t.line.visible=false; }
+  for(const f of pools.flashes){ f.active=false; f.life=0; f.grow=0; f.mesh.visible=false; }
   for(const s of G.smokes) scene.remove(s.mesh);
   G.smokes.length = 0;
   for(const z of G.zones){ scene.remove(z.mesh); if(z.beam) scene.remove(z.beam); }
@@ -418,6 +429,10 @@ export function clearRoundFX(){
   G.drops.length = 0;
   for(const p of G.projectiles) removeProjectileVisual(p);
   G.projectiles.length = 0;
+  G.abilityEvents.length = 0;
+  G.castMode = null;
+  if(G.smokeMode?.ring) scene.remove(G.smokeMode.ring);
+  G.smokeMode = null;
   G.utilities.items.length = 0;
   G.utilities.nextId = 1;
   G.controlMode = null;
