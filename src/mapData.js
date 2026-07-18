@@ -1115,6 +1115,45 @@ for(const m of MAPS){
 }
 
 // ============================================================
+// 视线遮断墙：长直通道/长厅自动插入交错挡板墙（h3.6）
+// 杜绝"一条线看到对面/开局对狙"，同时保留 ≥2.6m 通行口（左右交错 = 蛇形走位）
+// ============================================================
+for(const m of MAPS){
+  const keyPts = [];
+  for(const k of Object.keys(m.sites)) keyPts.push(m.sites[k].plant);
+  for(const p of m.defPostList) keyPts.push(p.p);
+  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]) keyPts.push(h.p);
+  for(const k of Object.keys(m.stages||{})) keyPts.push(m.stages[k]);
+  for(const k of Object.keys(m.chokes||{})) keyPts.push(m.chokes[k]);
+  for(const sp of m.spawns.atk) keyPts.push(sp);
+  for(const sp of m.spawns.def) keyPts.push(sp);
+  for(const r of m.open){
+    const w = r[2]-r[0], d = r[3]-r[1];
+    const mn = Math.min(w,d), mx = Math.max(w,d);
+    if(!((mn<=9 && mx>=22) || mx>=40)) continue;
+    if(mn < 4.2) continue;
+    const nB = mx>=34 ? 2 : 1;
+    for(let bi=0; bi<nB; bi++){
+      const t = nB===1 ? .5 : (bi===0 ? .35 : .68);
+      const cover = Math.min(mn-2.6, mn*.62);
+      if(cover < 1.4) continue;
+      let bx1,bz1,bx2,bz2;
+      if(w >= d){
+        const cx = r[0] + w*t;
+        bx1=cx-.4; bx2=cx+.4;
+        if(bi%2===0){ bz1=r[1]; bz2=r[1]+cover; } else { bz2=r[3]; bz1=r[3]-cover; }
+      } else {
+        const cz = r[1] + d*t;
+        bz1=cz-.4; bz2=cz+.4;
+        if(bi%2===0){ bx1=r[0]; bx2=r[0]+cover; } else { bx2=r[2]; bx1=r[2]-cover; }
+      }
+      if(keyPts.some(p=> p[0]>bx1-2.2 && p[0]<bx2+2.2 && p[1]>bz1-2.2 && p[1]<bz2+2.2)) continue;
+      m.innerWalls.push([+bx1.toFixed(2), +bz1.toFixed(2), +bx2.toFixed(2), +bz2.toFixed(2), 3.6]);
+    }
+  }
+}
+
+// ============================================================
 // 自动战场复杂化：在每个房间内程序化布置掩体阵（箱堆/立柱/矮墙）
 // 规则：避开出生房、包点下包位、驻守位、楼梯/高台/桥/建筑，走廊不放（保证连通）
 // ============================================================

@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=22";
-import { V3, rayAABB, dist2d } from "./utils.js?v=22";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=22";
+import { G } from "./state.js?v=23";
+import { V3, rayAABB, dist2d } from "./utils.js?v=23";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=23";
 const HALF = WORLD/2;   // 55
 const OLD_MAPS = [
   {
@@ -825,47 +825,63 @@ function pruneDeadEnds(wps, edges, md, mainSet){
 let wt, ft, ct, mt;
 function wallTexture(tone=0x9aa8ad){
   if(wt)return wt;
-  const c=document.createElement('canvas');c.width=512;c.height=512;
+  const c=document.createElement('canvas');c.width=256;c.height=256;
   const g=c.getContext('2d');
-  // 基色：根据地图主色调微调
-  const base='#'+tone.toString(16).padStart(6,'0');
-  g.fillStyle=base;g.fillRect(0,0,512,512);
-  // 大块镶板
-  g.strokeStyle='rgba(20,28,34,.28)';g.lineWidth=4;
-  for(let y=0;y<=512;y+=128){g.beginPath();g.moveTo(0,y);g.lineTo(512,y);g.stroke();}
-  for(let x=0;x<=512;x+=256){g.beginPath();g.moveTo(x,0);g.lineTo(x,512);g.stroke();}
-  // 内部细缝
-  g.strokeStyle='rgba(20,28,34,.14)';g.lineWidth=2;
-  for(let y=64;y<512;y+=128){g.beginPath();g.moveTo(0,y);g.lineTo(512,y);g.stroke();}
-  // 轻微污渍
-  g.fillStyle='rgba(30,38,44,.08)';
-  for(let i=0;i<40;i++){
-    const x=Math.random()*512,y=Math.random()*512,r=20+Math.random()*60;
-    g.beginPath();g.arc(x,y,r,0,7);g.fill();
+  g.fillStyle='#8f989e';g.fillRect(0,0,256,256);
+  // 细颗粒噪声
+  for(let i=0;i<900;i++){
+    g.fillStyle=`rgba(${Math.random()<.5?255:0},${Math.random()<.5?255:20},${Math.random()<.5?255:30},${.02+Math.random()*.05})`;
+    g.fillRect(Math.random()*256,Math.random()*256,2+Math.random()*3,2+Math.random()*3);
   }
-  // 细微噪点（统一冷灰，不乱）
-  for(let i=0;i<2000;i++){
-    const v=Math.random()<.5?0:255,a=Math.random()*.035;
-    g.fillStyle=`rgba(${v},${v},${v},${a})`;g.fillRect(Math.random()*512,Math.random()*512,2,2);
+  // 大板块分缝
+  g.strokeStyle='rgba(20,26,32,.5)';g.lineWidth=3;
+  for(let y=0;y<=256;y+=64){g.beginPath();g.moveTo(0,y);g.lineTo(256,y);g.stroke();}
+  for(let x=0;x<=256;x+=128){g.beginPath();g.moveTo(x,0);g.lineTo(x,256);g.stroke();}
+  g.strokeStyle='rgba(255,255,255,.10)';g.lineWidth=1;
+  for(let y=2;y<=256;y+=64){g.beginPath();g.moveTo(0,y);g.lineTo(256,y);g.stroke();}
+  // 风化流痕
+  for(let i=0;i<14;i++){
+    const x=Math.random()*256, h=30+Math.random()*90;
+    const gr=g.createLinearGradient(0,64,0,64+h);
+    gr.addColorStop(0,'rgba(30,36,42,.22)');gr.addColorStop(1,'rgba(30,36,42,0)');
+    g.fillStyle=gr;g.fillRect(x,64*(1+Math.floor(Math.random()*3)),3+Math.random()*5,h);
   }
+  // 螺栓
+  g.fillStyle='rgba(24,30,36,.7)';
+  for(let y=8;y<256;y+=64)for(let x=8;x<256;x+=32){g.beginPath();g.arc(x,y,2.2,0,7);g.fill();}
+  // 底部污渍带
+  const dirt=g.createLinearGradient(0,200,0,256);
+  dirt.addColorStop(0,'rgba(26,30,26,0)');dirt.addColorStop(1,'rgba(26,30,26,.35)');
+  g.fillStyle=dirt;g.fillRect(0,200,256,56);
   wt=new THREE.CanvasTexture(c);wt.wrapS=wt.wrapT=THREE.RepeatWrapping;wt.colorSpace=THREE.SRGBColorSpace;
   return wt;
 }
 function floorTexture(){
   if(ft)return ft;
-  const c=document.createElement('canvas');c.width=512;c.height=512;
+  const c=document.createElement('canvas');c.width=256;c.height=256;
   const g=c.getContext('2d');
-  g.fillStyle='#5a646d';g.fillRect(0,0,512,512);
-  // 大瓷砖
-  g.strokeStyle='rgba(18,24,30,.45)';g.lineWidth=3;
-  for(let y=0;y<=512;y+=128)for(let x=0;x<=512;x+=128)g.strokeRect(x+1,y+1,126,126);
-  // 内部细纹
-  g.strokeStyle='rgba(25,32,38,.22)';g.lineWidth=1;
-  for(let y=0;y<=512;y+=64){g.beginPath();g.moveTo(0,y);g.lineTo(512,y);g.stroke();}
-  for(let x=0;x<=512;x+=64){g.beginPath();g.moveTo(x,0);g.lineTo(x,512);g.stroke();}
-  // 磨损斑点
-  g.fillStyle='rgba(35,43,50,.12)';
-  for(let i=0;i<30;i++){const x=Math.random()*512,y=Math.random()*512,r=15+Math.random()*45;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  g.fillStyle='#a8b0b5';g.fillRect(0,0,256,256);
+  for(let i=0;i<1200;i++){
+    g.fillStyle=`rgba(${Math.random()<.5?70:200},${Math.random()<.5?76:206},${Math.random()<.5?82:210},${.03+Math.random()*.06})`;
+    g.fillRect(Math.random()*256,Math.random()*256,1.5+Math.random()*2.5,1.5+Math.random()*2.5);
+  }
+  // 大块分缝
+  g.strokeStyle='rgba(40,48,54,.5)';g.lineWidth=3;
+  g.strokeRect(0,0,256,256);
+  g.beginPath();g.moveTo(128,0);g.lineTo(128,256);g.stroke();
+  g.beginPath();g.moveTo(0,128);g.lineTo(256,128);g.stroke();
+  // 裂纹
+  g.strokeStyle='rgba(50,56,62,.45)';g.lineWidth=1.4;
+  for(let i=0;i<7;i++){
+    let x=Math.random()*256,y=Math.random()*256;
+    g.beginPath();g.moveTo(x,y);
+    for(let j=0;j<5;j++){x+=(Math.random()-.5)*44;y+=(Math.random()-.5)*44;g.lineTo(x,y);}
+    g.stroke();
+  }
+  // 排水格栅
+  g.fillStyle='rgba(36,42,48,.8)';g.fillRect(196,196,40,40);
+  g.strokeStyle='rgba(90,100,108,.9)';g.lineWidth=2;
+  for(let i=0;i<5;i++){g.beginPath();g.moveTo(200,200+i*8);g.lineTo(232,200+i*8);g.stroke();}
   ft=new THREE.CanvasTexture(c);ft.wrapS=ft.wrapT=THREE.RepeatWrapping;ft.colorSpace=THREE.SRGBColorSpace;
   return ft;
 }
@@ -874,14 +890,36 @@ function crateTexture(){
   const c=document.createElement('canvas');c.width=256;c.height=256;
   const g=c.getContext('2d');
   g.fillStyle='#7d6850';g.fillRect(0,0,256,256);
-  // 木板条
-  g.strokeStyle='rgba(30,22,14,.55)';g.lineWidth=5;
+  // 木纹
+  for(let i=0;i<40;i++){
+    g.strokeStyle=`rgba(${40+Math.random()*30},${28+Math.random()*22},${16+Math.random()*14},${.14+Math.random()*.18})`;
+    g.lineWidth=1+Math.random()*2;
+    const y=Math.random()*256;
+    g.beginPath();g.moveTo(0,y);
+    g.bezierCurveTo(64,y+(Math.random()-.5)*10,192,y+(Math.random()-.5)*10,256,y+(Math.random()-.5)*8);
+    g.stroke();
+  }
+  // 板条
+  g.strokeStyle='rgba(30,22,14,.6)';g.lineWidth=5;
   for(let y=0;y<=256;y+=42){g.beginPath();g.moveTo(0,y);g.lineTo(256,y);g.stroke();}
-  g.strokeStyle='rgba(255,235,200,.12)';g.lineWidth=2;
+  g.strokeStyle='rgba(255,235,200,.14)';g.lineWidth=2;
   for(let y=20;y<=256;y+=42){g.beginPath();g.moveTo(0,y);g.lineTo(256,y);g.stroke();}
-  // 钉孔
-  g.fillStyle='rgba(20,14,10,.5)';
-  for(let y=10;y<256;y+=42)for(let x=20;x<256;x+=60)g.fillRect(x,y,4,4);
+  // 金属包角
+  g.fillStyle='rgba(52,58,64,.95)';
+  g.fillRect(0,0,34,10);g.fillRect(0,0,10,34);
+  g.fillRect(222,0,34,10);g.fillRect(246,0,10,34);
+  g.fillRect(0,246,34,10);g.fillRect(0,222,10,34);
+  g.fillRect(222,246,34,10);g.fillRect(246,222,10,34);
+  // 铆钉
+  g.fillStyle='rgba(180,190,200,.85)';
+  for(const [x,y] of [[6,6],[28,6],[6,28],[250,6],[228,6],[250,28],[6,250],[28,250],[6,228],[250,250],[228,250],[250,228]]){
+    g.beginPath();g.arc(x,y,2.4,0,7);g.fill();
+  }
+  // 印刷标识
+  g.fillStyle='rgba(30,24,16,.5)';
+  g.font='700 26px Arial';g.textAlign='center';
+  g.fillText('TP-07',128,140);
+  g.strokeStyle='rgba(30,24,16,.5)';g.lineWidth=2;g.strokeRect(88,112,80,40);
   ct=new THREE.CanvasTexture(c);ct.wrapS=ct.wrapT=THREE.RepeatWrapping;ct.colorSpace=THREE.SRGBColorSpace;
   return ct;
 }
@@ -889,15 +927,28 @@ function metalTexture(){
   if(mt)return mt;
   const c=document.createElement('canvas');c.width=256;c.height=256;
   const g=c.getContext('2d');
-  g.fillStyle='#5e6a72';g.fillRect(0,0,256,256);
-  // 金属波纹
-  const grad=g.createLinearGradient(0,0,256,256);
-  grad.addColorStop(0,'rgba(255,255,255,.08)');grad.addColorStop(.5,'rgba(0,0,0,.08)');grad.addColorStop(1,'rgba(255,255,255,.06)');
-  g.fillStyle=grad;g.fillRect(0,0,256,256);
-  g.strokeStyle='rgba(15,22,28,.45)';g.lineWidth=3;g.strokeRect(8,8,240,240);
-  // 铆钉
-  g.fillStyle='rgba(20,28,34,.65)';
-  for(const[x,y]of[[20,20],[236,20],[20,236],[236,236]]){g.beginPath();g.arc(x,y,5,0,7);g.fill();}
+  g.fillStyle='#7e8a92';g.fillRect(0,0,256,256);
+  // 拉丝
+  for(let i=0;i<160;i++){
+    g.strokeStyle=`rgba(${Math.random()<.5?230:60},${Math.random()<.5?236:70},${Math.random()<.5?240:80},${.03+Math.random()*.05})`;
+    g.lineWidth=1;
+    const y=Math.random()*256;
+    g.beginPath();g.moveTo(0,y);g.lineTo(256,y);g.stroke();
+  }
+  // 面板缝 + 螺丝
+  g.strokeStyle='rgba(30,38,44,.6)';g.lineWidth=3;
+  g.strokeRect(14,14,228,228);
+  g.fillStyle='rgba(30,38,44,.8)';
+  for(const [x,y] of [[22,22],[234,22],[22,234],[234,234],[128,22],[128,234],[22,128],[234,128]]){
+    g.beginPath();g.arc(x,y,3,0,7);g.fill();
+  }
+  // 警示斜纹带
+  g.save();g.beginPath();g.rect(0,108,256,40);g.clip();
+  for(let x=-40;x<300;x+=28){
+    g.fillStyle=x/28%2?'rgba(220,180,40,.5)':'rgba(30,34,38,.5)';
+    g.beginPath();g.moveTo(x,148);g.lineTo(x+14,108);g.lineTo(x+28,108);g.lineTo(x+14,148);g.closePath();g.fill();
+  }
+  g.restore();
   mt=new THREE.CanvasTexture(c);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.colorSpace=THREE.SRGBColorSpace;
   return mt;
 }
@@ -913,6 +964,14 @@ function skyTexture(md){
   // 远距薄云
   g.fillStyle='rgba(255,255,255,.08)';
   for(let i=0;i<6;i++){const y=200+Math.random()*200,r=30+Math.random()*60;g.beginPath();g.arc(16+Math.random()*10-5,y,r,0,7);g.fill();}
+  // 云层
+  for(let i=0;i<16;i++){
+    const cx=Math.random()*512, cy=40+Math.random()*110, rw=40+Math.random()*90, rh=8+Math.random()*16;
+    const cg=g.createRadialGradient(cx,cy,2,cx,cy,rw);
+    cg.addColorStop(0,'rgba(255,255,255,.20)');cg.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=cg;
+    g.save();g.translate(cx,cy);g.scale(1,rh/rw);g.beginPath();g.arc(0,0,rw,0,7);g.fill();g.restore();
+  }
   return new THREE.CanvasTexture(c);
 }
 function letterTexture(ch,color){
@@ -956,11 +1015,13 @@ function addEnvironment(scene, md){
     new THREE.MeshStandardMaterial({map:winTex,color:new THREE.Color(md.wallTone).offsetHSL(.02,.03,.05),roughness:.92}),
   ];
   const roofMat=new THREE.MeshStandardMaterial({color:0x33302c,roughness:.95});
+  // 方形外圈布置：装饰到方形战场边界（含四角）之外
+  const sqRad=(ang,margin)=>{const c=Math.abs(Math.cos(ang)),sn=Math.abs(Math.sin(ang));return (HALF+margin)/Math.max(c,sn,.001);};
   // 环形建筑群（永远在战场边界之外）
   const N=34;
   for(let i=0;i<N;i++){
     const ang=i/N*Math.PI*2+rnd()*.16;
-    const rad=HALF+16+rnd()*26;
+    const rad=sqRad(ang,10)+rnd()*20;
     const w=5+rnd()*9,d=5+rnd()*9,h=5+rnd()*15;
     const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
     const m=new THREE.Mesh(boxGeo,bMats[i%3]);
@@ -977,7 +1038,7 @@ function addEnvironment(scene, md){
   const leafMat2=new THREE.MeshStandardMaterial({color:0x3a6b42,roughness:.95});
   for(let i=0;i<24;i++){
     const ang=i/24*Math.PI*2+rnd()*.3;
-    const rad=HALF+5+rnd()*10;
+    const rad=sqRad(ang,4)+rnd()*8;
     const x=Math.cos(ang)*rad,z=Math.sin(ang)*rad;
     const s=.8+rnd()*.7;
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16*s,.24*s,1.6*s,5),trunkMat);
@@ -991,7 +1052,7 @@ function addEnvironment(scene, md){
   const mtnMat=new THREE.MeshBasicMaterial({color:new THREE.Color(md.sky.fog).offsetHSL(0,0,-.12)});
   for(let i=0;i<9;i++){
     const ang=i/9*Math.PI*2+rnd()*.4;
-    const rad=HALF+70+rnd()*40;
+    const rad=sqRad(ang,60)+rnd()*40;
     const h=22+rnd()*26,r=26+rnd()*22;
     const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,5),mtnMat);
     m.position.set(Math.cos(ang)*rad,h/2-4,Math.sin(ang)*rad);
@@ -1118,13 +1179,22 @@ export function buildMap(scene, mapId){
     }
     const poleMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.7});
     const lampMat = new THREE.MeshBasicMaterial({color:0xffe9b8});
+    const glowC = document.createElement('canvas'); glowC.width=glowC.height=64;
+    const gg = glowC.getContext('2d');
+    const grd = gg.createRadialGradient(32,32,2,32,32,30);
+    grd.addColorStop(0,'rgba(255,235,180,.9)'); grd.addColorStop(1,'rgba(255,235,180,0)');
+    gg.fillStyle = grd; gg.fillRect(0,0,64,64);
+    const glowTex = new THREE.CanvasTexture(glowC);
     for(const k of Object.keys(md.chokes||{})){
       const c = md.chokes[k];
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,3.4,6), poleMat);
       pole.position.set(c[0]+1.2, 1.7, c[1]+1.2);
       const head = new THREE.Mesh(new THREE.BoxGeometry(.5,.16,.24), lampMat);
       head.position.set(c[0]+1.2, 3.4, c[1]+1.2);
-      scene.add(pole, head);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, transparent:true, opacity:.85, blending:THREE.AdditiveBlending, depthWrite:false}));
+      glow.scale.set(2.4,2.4,1);
+      glow.position.set(c[0]+1.2, 3.45, c[1]+1.2);
+      scene.add(pole, head, glow);
     }
   }
 

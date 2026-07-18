@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=22';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=22';
-import { WIDE } from './config.js?v=22';
-import { WORLD } from './mapData.js?v=22';
-import { colQuery } from './map.js?v=22';
+import { G } from './state.js?v=23';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=23';
+import { WIDE } from './config.js?v=23';
+import { WORLD } from './mapData.js?v=23';
+import { colQuery } from './map.js?v=23';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=22';
-import { sfx } from './audio.js?v=22';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=23';
+import { sfx } from './audio.js?v=23';
 
 let nextId = 1;
 
@@ -131,9 +131,9 @@ export function hitSpheres(ent){
   const s = ent.crouch ? .78 : 1;
   const y = ent.pos.y;
   return [
-    { part:'h', c:V3(ent.pos.x, y + 1.5*s + (ent.crouch ? .12 : 0), ent.pos.z), r:.17 },
-    { part:'b', c:V3(ent.pos.x, y + 1.05*s, ent.pos.z), r:.31 },
-    { part:'l', c:V3(ent.pos.x, y + .45*s, ent.pos.z), r:.29 },
+    { part:'h', c:V3(ent.pos.x, y + 1.64*s + (ent.crouch ? .12 : 0), ent.pos.z), r:.18 },
+    { part:'b', c:V3(ent.pos.x, y + 1.18*s, ent.pos.z), r:.32 },
+    { part:'l', c:V3(ent.pos.x, y + .5*s, ent.pos.z), r:.3 },
   ];
 }
 
@@ -338,33 +338,66 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=22';
+import { AGENTS } from './config.js?v=23';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
   const tc = teamColors[ent.team];
   const agentColor = AGENTS[ent.agent]?.color ?? 0x8fd3ff;
   const torsoMat = new THREE.MeshStandardMaterial({color:agentColor, roughness:.7, emissive:agentColor, emissiveIntensity:.12});
+  const darkMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.9});
+  const greyMat = new THREE.MeshStandardMaterial({color:0x3c4650, roughness:.75});
   const hmat = new THREE.MeshStandardMaterial({color:tc.head, roughness:.6});
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(.42,.8,.3), new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.9}));
-  legs.position.y = .4;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(.56,.62,.34), torsoMat);
-  torso.position.y = 1.06;
-  // 队伍色肩甲 + 胸带
-  const trimMat = new THREE.MeshStandardMaterial({color:tc.trim, roughness:.55, emissive:tc.trim, emissiveIntensity:.25});
-  const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(.14,.14,.36), trimMat);
-  shoulderL.position.set(-.35,1.3,0);
+  const trimMat = new THREE.MeshStandardMaterial({color:tc.trim, roughness:.55, emissive:tc.trim, emissiveIntensity:.3});
+
+  // 双腿（髋部铰点，可摆动）
+  const legGeo = new THREE.BoxGeometry(.17,.78,.22); legGeo.translate(0,-.39,0);
+  const legL = new THREE.Mesh(legGeo, darkMat); legL.position.set(-.13,.82,0);
+  const legR = new THREE.Mesh(legGeo, darkMat); legR.position.set(.13,.82,0);
+  // 靴子
+  const bootGeo = new THREE.BoxGeometry(.19,.12,.3); bootGeo.translate(0,-.72,-.03);
+  const bootL = new THREE.Mesh(bootGeo, greyMat); legL.add(bootL);
+  const bootR = new THREE.Mesh(bootGeo, greyMat); legR.add(bootR);
+  // 髋部
+  const hips = new THREE.Mesh(new THREE.BoxGeometry(.46,.18,.3), greyMat);
+  hips.position.y = .9;
+  // 躯干组（含胸甲/背包/肩甲/手臂/头）——蹲下时整体下沉
+  const upper = new THREE.Group(); upper.position.y = 0;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(.54,.56,.32), torsoMat);
+  torso.position.y = 1.24;
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(.42,.3,.08), trimMat);
+  chest.position.set(0,1.3,-.19);
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(.36,.4,.15), greyMat);
+  pack.position.set(0,1.22,.23);
+  const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(.16,.12,.3), trimMat);
+  shoulderL.position.set(-.35,1.48,0);
   const shoulderR = shoulderL.clone(); shoulderR.position.x = .35;
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(.58,.1,.36), trimMat);
-  belt.position.y = .82;
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(.56,.08,.34), trimMat);
+  belt.position.y = 1.0;
+  // 双臂（肩部铰点）：右臂托枪前伸，左臂扶护木
+  const armGeo = new THREE.BoxGeometry(.12,.56,.14); armGeo.translate(0,-.28,0);
+  const armL = new THREE.Mesh(armGeo, torsoMat); armL.position.set(-.33,1.45,0); armL.rotation.x = -.9; armL.rotation.z = .35;
+  const armR = new THREE.Mesh(armGeo, torsoMat); armR.position.set(.33,1.45,0); armR.rotation.x = -1.05; armR.rotation.z = -.15;
+  // 头 + 头盔 + 发光面甲
   const head = new THREE.Mesh(new THREE.SphereGeometry(.17,10,8), hmat);
-  head.position.y = 1.52;
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(.22,.07,.06), new THREE.MeshStandardMaterial({color:0x101820}));
-  visor.position.set(0,1.53,-.15);
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(.08,.1,.62), new THREE.MeshStandardMaterial({color:0x232b33}));
-  gun.position.set(.2,1.18,-.34);
-  g.add(legs,torso,shoulderL,shoulderR,belt,head,visor,gun);
+  head.position.y = 1.66;
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(.19,10,6,0,Math.PI*2,0,Math.PI*.55), greyMat);
+  helmet.position.y = 1.68;
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(.24,.07,.05),
+    new THREE.MeshStandardMaterial({color:0x0c141c, emissive:tc.trim, emissiveIntensity:.8}));
+  visor.position.set(0,1.67,-.16);
+  // 手中武器（机匣+弹匣+枪管）
+  const gunGrp = new THREE.Group();
+  const gBody = new THREE.Mesh(new THREE.BoxGeometry(.07,.09,.5), new THREE.MeshStandardMaterial({color:0x232b33, roughness:.5, metalness:.3}));
+  const gMag = new THREE.Mesh(new THREE.BoxGeometry(.05,.12,.06), greyMat); gMag.position.set(0,-.09,-.05);
+  const gBarrel = new THREE.Mesh(new THREE.CylinderGeometry(.016,.016,.2,6), darkMat);
+  gBarrel.rotation.x = Math.PI/2; gBarrel.position.set(0,.015,-.33);
+  gunGrp.add(gBody, gMag, gBarrel);
+  gunGrp.position.set(.2,1.32,-.36); gunGrp.rotation.x = .06;
+  upper.add(torso, chest, pack, shoulderL, shoulderR, belt, armL, armR, head, helmet, visor, gunGrp);
+  g.add(legL, legR, hips, upper);
   g.traverse(m=>{ if(m.isMesh) m.castShadow = true; });
+  g.userData = { legL, legR, armL, armR, upper };
   // name tag for allies
   if(ent.team==='ally'){
     const c = document.createElement('canvas'); c.width=256; c.height=64;
@@ -374,7 +407,7 @@ export function buildBody(ent){
     x.fillText(ent.name, 128, 40);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthTest:false}));
     sp.scale.set(1.6,.4,1);
-    sp.position.y = 2.0;
+    sp.position.y = 2.1;
     g.add(sp);
     ent.tag = sp;
   }
@@ -388,6 +421,20 @@ export function updateBodyPose(ent){
   ent.mesh.position.copy(ent.pos);
   ent.mesh.rotation.set(0, ent.yaw, 0);
   ent.mesh.visible = !ent.isPlayer && G.spectatingEnt !== ent;
+  // 走路摆腿摆臂 + 蹲姿下沉
+  const ud = ent.mesh.userData;
+  if(ud && ud.legL){
+    const sp = Math.hypot(ent.vel.x, ent.vel.z);
+    const amp = Math.min(.55, sp*.1);
+    const swing = Math.sin(G.now*9.5 + ent.id*2) * amp;
+    ud.legL.rotation.x = swing;
+    ud.legR.rotation.x = -swing;
+    ud.armL.rotation.x = -.9 - swing*.5;
+    ud.armR.rotation.x = -1.05 + swing*.35;
+    ud.upper.position.y = ent.crouch ? -.3 : 0;
+    ud.legL.scale.y = ent.crouch ? .72 : 1;
+    ud.legR.scale.y = ent.crouch ? .72 : 1;
+  }
 }
 
 export function resetBody(ent){

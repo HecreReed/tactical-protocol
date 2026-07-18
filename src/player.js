@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=22';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=22';
-import { SKINS, AGENTS } from './config.js?v=22';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=22';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=22';
-import { tracer, spawnSmoke } from './effects.js?v=22';
-import { sfx } from './audio.js?v=22';
+import { G, sens } from './state.js?v=23';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=23';
+import { SKINS, AGENTS } from './config.js?v=23';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=23';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=23';
+import { tracer, spawnSmoke } from './effects.js?v=23';
+import { sfx } from './audio.js?v=23';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -251,24 +251,88 @@ export function buildViewModel(){
     const handle = new THREE.Mesh(new THREE.BoxGeometry(.03,.04,.1), dark);
     g.add(blade, handle);
   } else {
+    // ---- 精细化枪模：按类别组装（机匣/枪管/护木/准星/弹匣/枪托/消音器等） ----
     const lenMap = {pistol:.28, smg:.42, rifle:.55, sniper:.68, heavy:.55, shotgun:.5};
     const L = lenMap[w.def.cat] || .4;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(.045,.085,L), dark);
-    body.position.z = -L/2;
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.14), accent);
-    barrel.rotation.x = Math.PI/2; barrel.position.z = -L-.06;
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(.035,.1,.045), dark);
-    grip.position.set(0,-.08,-.05); grip.rotation.x = .3;
-    g.add(body, barrel, grip);
+    const grey = new THREE.MeshStandardMaterial({color:0x39424c, roughness:.5, metalness:.35});
+    // 机匣
+    const body = new THREE.Mesh(new THREE.BoxGeometry(.045,.075,L*.55), dark);
+    body.position.z = -L*.32;
+    g.add(body);
+    // 护木（前段稍窄）
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(.04,.06,L*.4), grey);
+    guard.position.set(0,-.005,-L*.75);
+    g.add(guard);
+    // 枪管 + 枪口
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.012,.013,L*.35,8), dark);
+    barrel.rotation.x = Math.PI/2; barrel.position.set(0,.012,-L-.05);
+    const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,.06,8), accent);
+    muzzle.rotation.x = Math.PI/2; muzzle.position.set(0,.012,-L-.2);
+    g.add(barrel, muzzle);
+    // 准星（前柱 + 后照门）
+    const fSight = new THREE.Mesh(new THREE.BoxGeometry(.006,.03,.01), dark);
+    fSight.position.set(0,.055,-L-.02);
+    const rSight = new THREE.Mesh(new THREE.BoxGeometry(.03,.022,.012), dark);
+    rSight.position.set(0,.052,-L*.12);
+    g.add(fSight, rSight);
+    // 握把 + 扳机护圈
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(.034,.1,.045), dark);
+    grip.position.set(0,-.075,-.06); grip.rotation.x = .32;
+    const tGuard = new THREE.Mesh(new THREE.BoxGeometry(.008,.012,.07), grey);
+    tGuard.position.set(0,-.045,-.12);
+    g.add(grip, tGuard);
+    // 侧面能量条（皮肤发光装饰）
+    const railGlow = new THREE.Mesh(new THREE.BoxGeometry(.004,.014,L*.42), accent);
+    railGlow.position.set(.026,.012,-L*.4);
+    g.add(railGlow);
     if(w.def.cat!=='pistol'){
-      const mag = new THREE.Mesh(new THREE.BoxGeometry(.035,.11,.05), accent);
-      mag.position.set(0,-.09,-L*.55); mag.rotation.x = -.15;
-      g.add(mag);
+      // 弹匣（微弯两段）
+      const mag1 = new THREE.Mesh(new THREE.BoxGeometry(.032,.07,.05), grey);
+      mag1.position.set(0,-.075,-L*.5); mag1.rotation.x = -.12;
+      const mag2 = new THREE.Mesh(new THREE.BoxGeometry(.03,.05,.046), dark);
+      mag2.position.set(0,-.125,-L*.48); mag2.rotation.x = -.3;
+      g.add(mag1, mag2);
+      // 枪托
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(.036,.06,.14), grey);
+      stock.position.set(0,-.012,.1);
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(.04,.08,.02), dark);
+      pad.position.set(0,-.015,.18);
+      g.add(stock, pad);
+    } else {
+      // 手枪：套筒 + 击锤
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(.042,.03,L*.7), grey);
+      slide.position.set(0,.038,-L*.35);
+      const hammer = new THREE.Mesh(new THREE.BoxGeometry(.014,.02,.02), dark);
+      hammer.position.set(0,.04,.02);
+      g.add(slide, hammer);
+    }
+    if(w.def.cat==='smg'){
+      const fGrip = new THREE.Mesh(new THREE.BoxGeometry(.026,.07,.03), dark);
+      fGrip.position.set(0,-.055,-L*.8);
+      g.add(fGrip);
+    }
+    if(w.def.cat==='shotgun'){
+      const pump = new THREE.Mesh(new THREE.BoxGeometry(.05,.05,.12), accent);
+      pump.position.set(0,-.03,-L*.7);
+      g.add(pump);
+    }
+    if(w.def.cat==='heavy'){
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.045,12), grey);
+      drum.rotation.z = Math.PI/2; drum.position.set(0,-.06,-L*.42);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(.012,.03,.16), dark);
+      handle.position.set(0,.075,-L*.3);
+      g.add(drum, handle);
     }
     if(w.def.ads?.scope){
-      const scope = new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.14), dark);
-      scope.rotation.x = Math.PI/2; scope.position.set(0,.075,-L*.45);
-      g.add(scope);
+      // 狙击镜：镜筒 + 发光物镜 + 支架
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.16,10), dark);
+      tube.rotation.x = Math.PI/2; tube.position.set(0,.078,-L*.42);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(.019,12),
+        new THREE.MeshStandardMaterial({color:0x223a4a, emissive:0x39d0c9, emissiveIntensity:.6}));
+      lens.position.set(0,.078,-L*.42-.081);
+      const mount = new THREE.Mesh(new THREE.BoxGeometry(.012,.03,.04), grey);
+      mount.position.set(0,.055,-L*.42);
+      g.add(tube, lens, mount);
     }
   }
   vmGun = g;
@@ -461,8 +525,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=22';
-import { raySphere } from './utils.js?v=22';
+import { hitSpheres } from './combat.js?v=23';
+import { raySphere } from './utils.js?v=23';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
