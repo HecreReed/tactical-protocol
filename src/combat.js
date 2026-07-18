@@ -66,6 +66,7 @@ export function moveSpeed(ent){
   if(G.now < ent.slowUntil) s *= .45;
   if(G.now < ent.dazeUntil) s *= .6;
   if(G.now < ent.stimUntil) s *= 1.12;
+  if(ent.abilityState?.neonSprinting) s *= 1.45;
   if(ent.channel) s = 0;
   return s * ent.speedMul;
 }
@@ -256,7 +257,7 @@ export function killEnt(target, killer, weaponName, part){
     target.mesh.position.y = .25;
     if(target.tag) target.tag.visible = false;
   }
-  G.corpses.push({ ent: target, pos: target.pos.clone() });
+  G.corpses.push({ ent: target, pos: target.pos.clone(), diedAt:G.now });
   G.hooks.killfeed?.(killer, target, weaponName, part==='h');
   G.hooks.onDeath?.(target, killer);
 }
@@ -305,6 +306,16 @@ export function fireShot(shooter, baseDir, def, spreadRad, opts={}){
       tracer(V3().copy(origin).addScaledVector(dir, 1.2).addScaledVector(right, shooter.isPlayer?.12:0), end, tracerColor);
       if(shooter.isPlayer) G.hooks.hitmarker?.(false, false);
       continue;
+    }
+    let uHit=null;
+    for(const utility of G.utilities.items){
+      if(!utility.blocksBullets||utility.team===shooter.team||utility.hp<=0)continue;
+      const center=V3(utility.pos.x,(utility.pos.y||0)+(utility.radius||1)*.5,utility.pos.z);
+      const d=raySphere(origin,dir,center,utility.radius||.5,hit.dist);
+      if(d<hit.dist&&(!uHit||d<uHit.d))uHit={utility,d};
+    }
+    if(uHit){
+      end=V3().copy(origin).addScaledVector(dir,uHit.d);damageUtility(G.utilities,uHit.utility.id,34,shooter.team);impactFX(end);tracer(origin,end,tracerColor);continue;
     }
     let corpse = false;
     if(!hit.ent){

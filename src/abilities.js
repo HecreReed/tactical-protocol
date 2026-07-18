@@ -8,8 +8,8 @@ import { inAnyOpen, colQuery } from './map.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { raySphere } from './utils.js?v=28';
 import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
-import { beginControl, endControl, interceptProjectile, tickUtilities } from './abilityRuntime.js';
-import { activateReturnAnchor, consumeJettDash, initAgentState, primeJettDash, setViperEmitter, tickAgentState } from './agentMechanics.js';
+import { beginControl, endControl, interceptProjectile, registerUtility, tickUtilities } from './abilityRuntime.js';
+import { activateReturnAnchor, applySkyeRegrowth, canNeuralTheft, consumeJettDash, consumeReynaSoul, initAgentState, placeRendezvous, primeJettDash, setViperEmitter, startNeonSprint, tickAgentState, useNeonSlide, useRendezvous } from './agentMechanics.js';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -339,7 +339,10 @@ function gateAbility(ent, key){
     if(ent.ult < agent.ultCost) { if(ent.isPlayer) sfx.deny(); return null; }
   } else {
     const recast = (def.type==='razeBlastPack' && ent.abilityState?.blastPack) ||
-      ((def.type==='toxicSmoke'||def.type==='toxicWall') && ent.abilityState?.[def.type]);
+      ((def.type==='toxicSmoke'||def.type==='toxicWall') && ent.abilityState?.[def.type]) ||
+      (def.type==='cypherCage' && ent.abilityState?.cypherCage) ||
+      (def.type==='chamberRendezvous' && ent.abilityState?.rendezvous) ||
+      (def.type==='harborCove' && ent.abilityState?.harborCove);
     if(slot.n <= 0 && !recast) { if(ent.isPlayer) sfx.deny(); return null; }
     if(key==='e' && G.now < ent.abCd.e) { if(ent.isPlayer) sfx.deny(); return null; }
   }
@@ -356,6 +359,16 @@ function finishAbility(ent, key, slot, used){
 
 function schedule(delay, callback, tag){
   return scheduleAbilityEvent(G.abilityEvents, G.now + delay, callback, tag);
+}
+
+function spawnControlledScout(ent, scoutType, duration, speed=7){
+  const dir = dirFromYawPitch(ent.yaw, ent.pitch*.25);
+  const unit = { type:'controlledScout', scoutType, owner:ent, team:ent.team,
+    pos:eyePos(ent).clone().addScaledVector(dir,.9), vel:dir.clone().multiplyScalar(speed),
+    born:G.now, until:G.now+duration, nextPing:G.now+.5 };
+  G.projectiles.push(unit);
+  beginControl(G, ent, unit, unit.until);
+  return unit;
 }
 
 export function useAbility(ent, key){
@@ -602,11 +615,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.ultReady();
       break;
     case 'sovaDrone': {
-      const dir = dirFromYawPitch(ent.yaw, ent.pitch*.25);
-      const unit = { type:'controlledScout', scoutType:'sova', owner:ent, team:ent.team,
-        pos:eyePos(ent).clone().addScaledVector(dir,.9), vel:dir.clone().multiplyScalar(7), born:G.now, until:G.now+8, nextPing:G.now+.5 };
-      G.projectiles.push(unit);
-      beginControl(G, ent, unit, unit.until);
+      spawnControlledScout(ent,'sova',8,7);
       sfx.reveal();
       break;
     }
@@ -920,6 +929,103 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.beamCharge(G.player ? p.distanceTo(G.player.pos) : 0);
       break;
     }
+    // ---- Cypher ----
+    case 'cypherTrapwire': {
+      const p=aimPoint(ent,9); spawnTrap(V3(p.x,ent.pos.y,p.z),ent.yaw,ent); sfx.ability(); break;
+    }
+    case 'cypherCage': {
+      const cage=ent.abilityState.cypherCage;
+      if(cage){ spawnSmoke(cage.pos,3.4,7); delete ent.abilityState.cypherCage; used=false; }
+      else { const p=aimPoint(ent,20); ent.abilityState.cypherCage={pos:p}; targetRing(p,1,500,ent.team==='ally'?0x39d0c9:0xff4655,ent); }
+      break;
+    }
+    case 'cypherSpycam': {
+      const p=aimPoint(ent,16); const unit={type:'controlledScout',scoutType:'camera',owner:ent,team:ent.team,pos:V3(p.x,1.8,p.z),vel:V3(),born:G.now,until:G.now+12,nextPing:G.now+.5};
+      G.projectiles.push(unit); beginControl(G,ent,unit,unit.until); break;
+    }
+    case 'cypherNeuralTheft': {
+      if(!canNeuralTheft(ent,G.corpses,G.now)){used=false;sfx.deny();break;}
+      for(const e of G.ents) if(e.alive&&e.team!==ent.team) e.revealedUntil=Math.max(e.revealedUntil||0,G.now+2);
+      schedule(2,()=>{for(const e of G.ents) if(e.alive&&e.team!==ent.team) e.revealedUntil=Math.max(e.revealedUntil||0,G.now+2);},'neural-theft');
+      sfx.reveal(); break;
+    }
+    // ---- Reyna ----
+    case 'reynaLeer': {
+      const p=aimPoint(ent,20); flashFX(V3(p.x,1.8,p.z));
+      const eye=registerUtility(G.utilities,{type:'leer',team:ent.team,ownerId:ent.id,hp:100,pos:V3(p.x,1.8,p.z),until:G.now+2,radius:18});
+      for(const e of G.ents){if(!e.alive||e.team===ent.team||dist2d(e.pos,p)>18||losBlocked(eyePos(e),eye.pos))continue;e.flashUntil=Math.max(e.flashUntil||0,G.now+2);}
+      break;
+    }
+    case 'reynaDevour':
+      if(!consumeReynaSoul(ent,'devour',G.now)){used=false;sfx.deny();break;}
+      ent.healQueue=Math.max(ent.healQueue||0,100); ent.armor=Math.min(50,(ent.armor||0)+25); sfx.heal(); break;
+    case 'reynaDismiss':
+      if(!consumeReynaSoul(ent,'dismiss',G.now)){used=false;sfx.deny();break;}
+      ent.resistUntil=G.now+2; ent.dashUntil=G.now+.35; sfx.dash(); break;
+    case 'reynaEmpress':
+      ent.empressUntil=G.now+30; ent.stimUntil=G.now+30; sfx.ultReady(); break;
+    // ---- Skye ----
+    case 'skyeRegrowth':
+      if(!applySkyeRegrowth(ent,G.ents,1.5)){used=false;sfx.deny();break;} sfx.heal(); break;
+    case 'skyeTrailblazer': spawnControlledScout(ent,'trailblazer',6,8); sfx.ability(); break;
+    case 'skyeGuidingLight': throwProj(ent,'flash',opts.alt?8:24,opts.alt?2:3); sfx.ability(); break;
+    case 'skyeSeekers': {
+      const foes=G.ents.filter(e=>e.alive&&e.team!==ent.team).sort((a,b)=>dist2d(a.pos,ent.pos)-dist2d(b.pos,ent.pos)).slice(0,3);
+      if(!foes.length){used=false;break;} for(const foe of foes) schedule(2,()=>{if(foe.alive){foe.revealedUntil=G.now+4;foe.dazeUntil=G.now+2.2;}},'skye-seeker');
+      sfx.reveal(); break;
+    }
+    // ---- Neon ----
+    case 'neonFastLane': {
+      const dir=dirFromYawPitch(ent.yaw,0),side=V3(-dir.z,0,dir.x);
+      for(let i=1;i<=8;i++) for(const s of [-1,1]){const p=V3(ent.pos.x+dir.x*i*2.5+side.x*s*2.2,0,ent.pos.z+dir.z*i*2.5+side.z*s*2.2);spawnSmoke(p,1.15,6);}
+      break;
+    }
+    case 'neonRelayBolt': throwProj(ent,'relay',24,3); sfx.ability(); break;
+    case 'neonHighGear':
+      if(ent.abilityState.neonSprinting) ent.abilityState.neonSprinting=false;
+      else if(!startNeonSprint(ent)){used=false;sfx.deny();break;} used=false; sfx.dash(); break;
+    case 'neonOverdrive': ent.abilityState.overdriveUntil=G.now+20; ent.resources.energy=100; sfx.ultReady(); break;
+    // ---- Harbor ----
+    case 'harborStormSurge': {
+      const p=aimPoint(ent,24); targetRing(p,4,900,0x3fa8a0,ent); schedule(.9,()=>{spawnZone('slow',p,4,5,0,ent);for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,p)<4)e.flashUntil=G.now+2;},'storm-surge'); break;
+    }
+    case 'harborHighTide': {
+      const dir=dirFromYawPitch(ent.yaw,0); for(let i=1;i<=12;i++)spawnSmoke(V3(ent.pos.x+dir.x*i*2.2,0,ent.pos.z+dir.z*i*2.2),1.6,12); break;
+    }
+    case 'harborCove': {
+      const cove=ent.abilityState.harborCove;
+      if(cove&&!cove.shielded){cove.shielded=true;cove.utility=registerUtility(G.utilities,{type:'cove-shield',team:ent.team,ownerId:ent.id,hp:500,pos:cove.pos,radius:3.8,until:G.now+12,blocksBullets:true});used=false;break;}
+      if(cove){used=false;break;} const p=aimPoint(ent,30); ent.abilityState.harborCove={pos:p,smoke:spawnSmoke(p,3.8,15),shielded:false}; break;
+    }
+    case 'harborReckoning': coneDaze(ent,32,.65,3); for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,ent.pos)<32)e.flashUntil=G.now+2; break;
+    // ---- Fade ----
+    case 'fadeProwler': spawnControlledScout(ent,'prowler',6,8); sfx.reveal(); break;
+    case 'fadeSeize': {
+      const p=aimPoint(ent,22); targetRing(p,4.5,700,0x6a5acd,ent); schedule(.7,()=>{for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,p)<4.5){e.slowUntil=G.now+5;e.abilityState.tether={pos:p,until:G.now+5};e.hp=Math.min(e.hp,75);}},'fade-seize');break;
+    }
+    case 'fadeHaunt': {
+      const p=aimPoint(ent,30); revealArea(p,16,4,ent.team); for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,p)<16)e.abilityState.terrorTrailUntil=G.now+6;break;
+    }
+    case 'fadeNightfall': coneDaze(ent,30,.45,4); for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,ent.pos)<30){e.revealedUntil=G.now+4;e.hp=Math.min(e.hp,75);} break;
+    // ---- Deadlock ----
+    case 'deadlockGravNet': throwProj(ent,'gravnet',21,3); sfx.ability(); break;
+    case 'deadlockSensor': {const p=aimPoint(ent,10);spawnDevice('alarm',p,ent,{until:G.now+90,r:5});break;}
+    case 'deadlockBarrier': {const dir=dirFromYawPitch(ent.yaw,0);const p=V3(ent.pos.x+dir.x*4,0,ent.pos.z+dir.z*4);spawnWall(p,ent.yaw,30);break;}
+    case 'deadlockAnnihilation': {
+      const look=dirFromYawPitch(ent.yaw,0);const target=G.ents.filter(e=>e.alive&&e.team!==ent.team&&dist2d(e.pos,ent.pos)<24).sort((a,b)=>dist2d(a.pos,ent.pos)-dist2d(b.pos,ent.pos))[0];
+      if(!target){used=false;break;} target.abilityState.cocoon={owner:ent,until:G.now+7};target.slowUntil=G.now+7;target.suppressedUntil=G.now+7;
+      schedule(7,()=>{if(target.alive&&target.abilityState.cocoon)applyDamage(target,999,ent,'Annihilation','b');},'annihilation');break;
+    }
+    // ---- Chamber ----
+    case 'chamberTrademark': {const p=aimPoint(ent,10);spawnDevice('alarm',p,ent,{until:G.now+90,r:4});break;}
+    case 'chamberHeadhunter': {
+      ent.weapons.secondary={id:'headhunter',def:{name:'Headhunter',cat:'pistol',mag:8,res:0,fi:.25,rl:0,alt:false,pellets:1,dmg:{0:{h:159,b:55,l:46}},spread:{base:.25,mv:.8,bloom:1.2},recoil:{perShot:12,cap:100,wander:1.5,decay:32},ads:{fov:45,spread:.3,mv:.6,recoil:.7},vm:{x:.18,y:-.14,z:-.33,sc:.042,rot:[0,0,.05]}},ammo:Math.max(1,slot.n),reserve:0,nextFire:0,reloadEnd:0,shots:0,lastShot:0};ent.slot='secondary';break;
+    }
+    case 'chamberRendezvous':
+      if(ent.abilityState.rendezvous){if(!useRendezvous(ent,G.now)){used=false;break;}used=false;sfx.teleport(0);}else{const p=aimPoint(ent,8);placeRendezvous(ent,p);targetRing(p,1,600,0xd8b45a,ent);}break;
+    case 'chamberTourDeForce': {
+      const w={id:'tourdeforce',def:{name:'Tour De Force',cat:'sniper',mag:5,res:0,fi:.9,rl:0,alt:false,pellets:1,dmg:{0:{h:255,b:150,l:120}},spread:{base:.15,mv:2.5,bloom:2},recoil:{perShot:40,cap:220,wander:3,decay:20},ads:{fov:18,spread:.05,mv:.4,recoil:.5,scope:true},vm:{x:.18,y:-.14,z:-.49,sc:.06,rot:[0,0,.02]}},ammo:5,reserve:0,nextFire:0,reloadEnd:0,shots:0,lastShot:0};ent.weapons.primary=w;ent.slot='primary';ent.abilityState.tourDeForce=true;sfx.ultReady();break;
+    }
   }
   return used;
 }
@@ -1161,7 +1267,7 @@ export function sellAbility(ent, key){
 }
 
 // ---------- 投掷物弹跳物理：墙面/箱体反弹 + 落地衰减滚动，静止或超时后生效 ----------
-const BOUNCY = new Set(['smoke','flash','molly','slow','shock','nade','bignade','frag','acid','hot','nanoproj','clusterlet']);
+const BOUNCY = new Set(['smoke','flash','molly','slow','shock','relay','gravnet','nade','bignade','frag','acid','hot','nanoproj','clusterlet']);
 function projBlocked(pos, r){
   const lists = [colQuery(pos.x-r-.5, pos.z-r-.5, pos.x+r+.5, pos.z+r+.5), G.dynColliders];
   for(const list of lists) for(const b of list){
@@ -1273,6 +1379,14 @@ export function updateProjectiles(dt){
         case 'shock':
           spawnZone('molly', p.pos.clone().setY(0), 3.2, 4, 70, p.owner);
           sfx.molly(G.player ? p.pos.distanceTo(G.player.pos) : 0);
+          break;
+        case 'relay':
+          for(const e of G.ents) if(e.alive&&e.team!==p.owner.team&&dist2d(e.pos,p.pos)<4){e.dazeUntil=G.now+3;e.slowUntil=G.now+3;}
+          sfx.stun(G.player?p.pos.distanceTo(G.player.pos):0);
+          break;
+        case 'gravnet':
+          spawnZone('slow',p.pos.clone().setY(0),4.5,6,0,p.owner);
+          for(const e of G.ents) if(e.alive&&e.team!==p.owner.team&&dist2d(e.pos,p.pos)<4.5)e.abilityState.gravnetUntil=G.now+6;
           break;
         case 'recon': {
           const pt = p.pos.clone().setY(0);

@@ -6,6 +6,7 @@ import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, 
 import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=28';
 import { tracer, spawnSmoke } from './effects.js?v=28';
 import { sfx } from './audio.js?v=28';
+import { useNeonSlide } from './agentMechanics.js';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -370,6 +371,9 @@ export function updatePlayer(dt){
   const l = Math.hypot(wx,wz);
   if(l>0){ wx/=l; wz/=l; }
   const dashing = G.now < p.dashUntil;
+  if(p.agent==='neon'&&p.abilityState.neonSprinting&&p.crouch&&l>0&&p.grounded&&useNeonSlide(p)){
+    p.vel.x=wx*15;p.vel.z=wz*15;p.dashUntil=G.now+.45;
+  }
   if(!dashing){
     // 地面：加速 60 / 松键急停 92（CS 式急停手感，配合首发精准）；空中弱操控
     const hasInput = l > 0;
@@ -419,7 +423,13 @@ export function updatePlayer(dt){
 
   const canShoot = (phase==='live'||phase==='planted') && !p.channel && G.now > P.equipUntil && !G.buyOpen && G.locked && !G.castMode;
   if(canShoot && G.mouse.lmb){
-    if(p.knifeUlt > 0){
+    if(G.now<(p.abilityState?.overdriveUntil||0)&&(p.resources?.energy||0)>0){
+      if(G.now>=w.nextFire){
+        w.nextFire=G.now+.1;p.resources.energy=Math.max(0,p.resources.energy-2);
+        const dir=dirFromYawPitch(p.yaw,p.pitch);
+        fireShot(p,dir,{name:'Overdrive',cat:'ult',dmg:{0:{h:54,b:18,l:15}},pellets:1},deg(.08),{sndCat:'ult',color:0x58b8ff});
+      }
+    } else if(p.knifeUlt > 0){
       if(G.now >= w.nextFire){
         w.nextFire = G.now + .33;
         const dir = dirFromYawPitch(p.yaw, p.pitch);

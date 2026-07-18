@@ -27,15 +27,15 @@ export const AGENTS = {
     e:['Sky Smoke','smokeSky',0,3,3,19.25,{free:true}], x:['Orbital Strike','orbital',0,1,0,0,{free:true}],
   }),
   chamber: agent('chamber','Chamber','Sentinel',0xd8b45a,8,'Hold long angles with bespoke weapons and a teleport anchor.',{
-    c:['Trademark','tripwire',200,1,1], q:['Headhunter','headhunter',100,8,0],
-    e:['Rendezvous','chamberRendezvous',0,1,1,30,{free:true}], x:['Tour De Force','tourdeforce',0,1,0,0,{free:true}],
+    c:['Trademark','chamberTrademark',200,1,1], q:['Headhunter','chamberHeadhunter',100,8,0],
+    e:['Rendezvous','chamberRendezvous',0,1,1,30,{free:true}], x:['Tour De Force','chamberTourDeForce',0,1,0,0,{free:true}],
   }),
   clove: agent('clove','Clove','Controller',0xe48ac5,8,'Fight beyond death with smokes, decay, and a self-revive.',{
     c:['Pick-me-up','clovePickMeUp',200,1,1], q:['Meddle','cloveMeddle',250,1,1],
     e:['Ruse','cloveRuse',0,2,2,30,{free:true}], x:['Not Dead Yet','cloveRevive',0,1,0,0,{free:true}],
   }),
   cypher: agent('cypher','Cypher','Sentinel',0xd8d0b8,6,'Watch the map through traps, cages, and a remote camera.',{
-    c:['Trapwire','tripwire',200,2,1], q:['Cyber Cage','cage',100,2,1],
+    c:['Trapwire','cypherTrapwire',200,2,1], q:['Cyber Cage','cypherCage',100,2,1],
     e:['Spycam','cypherSpycam',0,1,1,30,{free:true}], x:['Neural Theft','cypherNeuralTheft',0,1,0,0,{free:true}],
   }),
   deadlock: agent('deadlock','Deadlock','Sentinel',0xe0b8c8,7,'Fortify sites with reactive sensors and nanowire.',{
@@ -44,7 +44,7 @@ export const AGENTS = {
   }),
   fade: agent('fade','Fade','Initiator',0x6a5acd,8,'Track enemies with nightmares, tethers, and prowlers.',{
     c:['Prowler','fadeProwler',250,2,1], q:['Seize','fadeSeize',200,1,1],
-    e:['Haunt','fadeHaunt',0,1,1,40,{free:true}], x:['Nightfall','nightfall',0,1,0,0,{free:true}],
+    e:['Haunt','fadeHaunt',0,1,1,40,{free:true}], x:['Nightfall','fadeNightfall',0,1,0,0,{free:true}],
   }),
   gekko: agent('gekko','Gekko','Initiator',0x8bd450,7,'Deploy a reclaimable crew of creatures.',{
     c:['Mosh Pit','gekkoMosh',250,1,1], q:['Wingman','gekkoWingman',300,1,1],
@@ -92,7 +92,7 @@ export const AGENTS = {
   }),
   reyna: agent('reyna','Reyna','Duelist',0xc45ad0,6,'Consume soul orbs to heal or become intangible.',{
     c:['Leer','reynaLeer',250,2,1], q:['Devour','reynaDevour',200,2,1],
-    e:['Dismiss','reynaDismiss',0,2,1,0,{free:true}], x:['Empress','empress',0,1,0,0,{free:true}],
+    e:['Dismiss','reynaDismiss',0,2,1,0,{free:true}], x:['Empress','reynaEmpress',0,1,0,0,{free:true}],
   }),
   sage: agent('sage','Sage','Sentinel',0xe8e6da,8,'Protect allies with healing, barriers, and resurrection.',{
     c:['Barrier Orb','wall',400,1,1], q:['Slow Orb','slowProj',200,2,1],
@@ -100,7 +100,7 @@ export const AGENTS = {
   }),
   skye: agent('skye','Skye','Initiator',0x9fe08a,8,'Guide controllable creatures and channel team healing.',{
     c:['Regrowth','skyeRegrowth',200,1,1], q:['Trailblazer','skyeTrailblazer',250,1,1],
-    e:['Guiding Light','skyeGuidingLight',0,2,2,40,{free:true}], x:['Seekers','seekers',0,1,0,0,{free:true}],
+    e:['Guiding Light','skyeGuidingLight',0,2,2,40,{free:true}], x:['Seekers','skyeSeekers',0,1,0,0,{free:true}],
   }),
   sova: agent('sova','Sova','Initiator',0x69c77e,8,'Scout with a drone and expose enemies with recon arrows.',{
     c:['Owl Drone','sovaDrone',400,1,1], q:['Shock Bolt','shock',150,2,1],

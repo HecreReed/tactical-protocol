@@ -9,6 +9,7 @@ export function initAgentState(ent){
   ent.resources ||= {};
   if(ent.agent==='viper') ent.resources.fuel = 100;
   if(ent.agent==='neon') ent.resources.energy = 100;
+  if(ent.agent==='neon'){ ent.resources.slideCharges = 1; ent.resources.slideKills = 0; }
   if(ent.agent==='reyna') ent.resources.soulOrbs = [];
   if(ent.agent==='astra') ent.resources.stars = 4;
   if(ent.agent==='skye') ent.resources.regrowth = 100;
@@ -69,10 +70,66 @@ export function handleAgentKill(killer, target, now){
     killer.resources.soulOrbs ||= [];
     killer.resources.soulOrbs.push({ pos:clonePoint(target.pos||killer.pos), until:now+3 });
   }
-  if(killer.agent==='neon') killer.resources.energy = Math.min(100, (killer.resources.energy||0)+25);
+  if(killer.agent==='neon'){
+    killer.resources.energy = Math.min(100, (killer.resources.energy||0)+25);
+    killer.resources.slideKills = (killer.resources.slideKills||0)+1;
+    if(killer.resources.slideKills>=2){ killer.resources.slideKills=0; killer.resources.slideCharges=1; }
+  }
   if(killer.agent==='iso' && now < (killer.abilityState?.doubleTapUntil||0)) killer.abilityState.isoShield = true;
   if(killer.agent==='clove') killer.abilityState.pickMeUpUntil = now + 10;
   if(killer.agent==='miks' && now < (killer.abilityState?.harmonizeUntil||0)) killer.abilityState.harmonizeUntil = now + 10;
+}
+
+export function consumeReynaSoul(ent, mode, now){
+  const orbs = ent.resources?.soulOrbs || [];
+  const index = orbs.findIndex(orb => now <= orb.until);
+  if(index < 0) return false;
+  orbs.splice(index,1);
+  if(mode==='devour'){
+    ent.healQueue = Math.max(ent.healQueue||0, 100);
+    ent.abilityState.overhealHoldUntil = now + 30;
+  } else if(mode==='dismiss') ent.abilityState.dismissUntil = now + 2;
+  return true;
+}
+
+export function startNeonSprint(ent){
+  if((ent.resources?.energy||0)<=0) return false;
+  ent.abilityState.neonSprinting = true;
+  return true;
+}
+
+export function useNeonSlide(ent){
+  if((ent.resources?.slideCharges||0)<=0) return false;
+  ent.resources.slideCharges--;
+  ent.abilityState.neonSlide = true;
+  return true;
+}
+
+export function placeRendezvous(ent, pos){
+  ent.abilityState.rendezvous = { pos:clonePoint(pos), active:true };
+}
+
+export function useRendezvous(ent){
+  const anchor = ent.abilityState?.rendezvous;
+  if(!anchor?.active) return false;
+  restorePoint(ent, anchor.pos);
+  anchor.active = false;
+  return true;
+}
+
+export function canNeuralTheft(ent, corpses, now){
+  return corpses.some(c => c.ent?.team!==ent.team && now-(c.diedAt??-Infinity)<=6);
+}
+
+export function applySkyeRegrowth(skye, entities, dt){
+  if((skye.resources?.regrowth||0)<=0) return false;
+  let healed=false;
+  for(const ent of entities){
+    if(ent===skye || ent.team!==skye.team || ent.hp<=0 || ent.hp>=100) continue;
+    ent.hp=Math.min(100,ent.hp+20*dt); healed=true;
+  }
+  if(healed) skye.resources.regrowth=Math.max(0,skye.resources.regrowth-20*dt);
+  return healed;
 }
 
 export function setViperEmitter(ent, key, active){
