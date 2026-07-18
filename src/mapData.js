@@ -1178,6 +1178,123 @@ function spawnSets(){
 })();
 
 // ============================================================
+// 云阙 yunque — 三层山顶宫城：服务庭 / 宫城层 / 观星台
+// ============================================================
+(function buildYunque(){
+  const rooms=[
+    room(-36,30,36,38),room(-34,-38,34,-31),
+    room(18,-27,36,-11),room(-8,-28,8,-13),room(-36,-27,-18,-11),
+    room(-10,5,10,19),room(18,5,34,20),room(-34,5,-18,20),
+    room(12,-8,26,1),room(-26,-8,-12,1),room(-10,-11,10,-2),
+  ];
+  const corridors=[
+    corridor([[28,30],[28,24],[31,24],[31,20]],3),
+    corridor([[0,30],[0,24],[4,24],[4,19]],3),
+    corridor([[-28,30],[-28,24],[-31,24],[-31,20]],3),
+    corridor([[26,5],[26,0],[20,0],[20,-8],[27,-8],[27,-11]],2.8),
+    corridor([[-26,5],[-26,0],[-20,0],[-20,-8],[-27,-8],[-27,-11]],2.8),
+    corridor([[2,5],[2,-2],[-3,-2],[-3,-8],[0,-8],[0,-13]],2.8),
+    corridor([[12,-5],[8,-5],[8,-16],[18,-16]],2.2),
+    corridor([[-12,-5],[-8,-5],[-8,-17],[-18,-17]],2.2),
+    corridor([[8,-21],[18,-21]],2.2),corridor([[-8,-21],[-18,-21]],2.2),
+    corridor([[27,-31],[27,-27]],3),corridor([[0,-31],[0,-28]],3),corridor([[-27,-31],[-27,-27]],3),
+    corridor([[10,13],[14,13],[14,16],[18,16]],2),
+    corridor([[-10,13],[-14,13],[-14,16],[-18,16]],2),
+    corridor([[-18,-28],[18,-28]],2),
+  ];
+  const innerWalls=[
+    ...house(-7,8,-1,15,3.6,{s:[-5,-3],n:[-4,-2],e:[10,12]}),
+    ...house(22,8,29,14,3.6,{s:[24,27],w:[10,12]}),
+    ...house(-29,8,-22,14,3.6,{s:[-27,-24],e:[10,12]}),
+  ];
+  const platforms=[[-22,6,-14,12,2.4],[14,6,22,12,2.4],[-4,13,4,19,3]];
+  const stairs=[
+    {x1:-26,z1:7,x2:-22,z2:11,dir:'+x',h:2.4},
+    {x1:22,z1:7,x2:26,z2:11,dir:'-x',h:2.4},
+    {x1:-4,z1:9,x2:4,z2:13,dir:'+z',h:3},
+  ];
+  const bridges=[[-14,7,14,10,2.4]];
+  const crates=[
+    [29,24,1.8,1,0],[-29,24,1.8,1,0],[3,23,1.5,1,0],
+    [26,-15,1.8,1,0],[-26,-15,1.8,1,0],[4,-20,1.6,1,0],
+    [-18,9,1.4,1,0,2.4],[18,9,1.4,1,0,2.4],[0,16,1.2,1,0,3],
+    [10,-27,1.6,2,1],[-10,-27,1.6,2,1],
+  ];
+  const sites={A:{rect:[18,-27,36,-11],plant:[27,-18]},B:{rect:[-8,-28,8,-13],plant:[1,-20]},C:{rect:[-36,-27,-18,-11],plant:[-27,-18]}};
+  MAPS.push(makeMap({
+    id:'yunque',name:'云阙',desc:'三点宫城·下层服务庭·中央飞桥·双侧宫台·三米观星台',
+    sky:{top:'#263e56',mid:'#6f91a4',bot:'#d7c7a5',fog:0x7892a0,fogFar:175,sun:0xffefd1,sunPos:[-25,58,30],hemi:[0xd7e5e8,0x394348]},
+    wallTone:0x9da6a2,accent:0xd6b66d,rooms,corridors,innerWalls,roofs:[],platforms,stairs,bridges,crates,sites,
+    stages:{A:[27,1],B:[0,-8],C:[-27,1]},
+    defPostList:[
+      {p:[29,-14],look:[27,0]},{p:[-18,9,2.4],look:[-27,-4,2.4]},
+      {p:[4,-16],look:[0,-7]},{p:[18,9,2.4],look:[27,-4,2.4]},{p:[-29,-14],look:[-27,0]},
+    ],
+    atkHolds:{
+      A:[{p:[25,-15],look:[27,-27]},{p:[18,9,2.4],look:[27,-12,2.4]},{p:[34,-15],look:[20,-18]}],
+      B:[{p:[-5,-16],look:[2,-23]},{p:[0,16,3],look:[0,-8,3]},{p:[6,-15],look:[-3,-22]}],
+      C:[{p:[-25,-15],look:[-27,-27]},{p:[-18,9,2.4],look:[-27,-12,2.4]},{p:[-34,-15],look:[-20,-18]}],
+    },
+    smokePoints:{A:[[27,-12],[20,-15]],B:[[0,-13],[6,-16]],C:[[-27,-12],[-20,-15]]},
+    chokes:{A:[27,-9],B:[0,-11],C:[-27,-9]},spawns:spawnSets(),
+    barriers:[{rect:[-39,28.5,39,30.5],side:'atk'},{rect:[18,-11.8,36,-10.8],side:'def'},{rect:[-8,-13.8,8,-12.8],side:'def'},{rect:[-36,-11.8,-18,-10.8],side:'def'}],
+  }));
+})();
+
+// ============================================================
+// 潮门 chaomen — 运河船坞：排水渠 / 码头层 / 吊机猫道
+// ============================================================
+(function buildChaomen(){
+  const rooms=[
+    room(-36,30,36,38),room(-34,-38,34,-31),
+    room(18,-27,36,-11),room(-36,-27,-18,-11),
+    room(-9,5,9,20),room(18,5,36,20),room(-36,5,-18,20),
+    room(-9,-25,9,-13),room(10,-8,25,1),room(-25,-8,-10,1),
+  ];
+  const corridors=[
+    corridor([[28,30],[28,24],[32,24],[32,20]],3),corridor([[0,30],[0,20]],3),corridor([[-28,30],[-28,24],[-32,24],[-32,20]],3),
+    corridor([[29,5],[29,0],[22,0],[22,-8],[28,-8],[28,-11]],2.8),
+    corridor([[-29,5],[-29,0],[-22,0],[-22,-8],[-28,-8],[-28,-11]],2.8),
+    corridor([[4,5],[4,-2],[-3,-2],[-3,-13]],2.6),
+    corridor([[10,-4],[7,-4],[7,-18],[18,-18]],2.2),corridor([[-10,-4],[-7,-4],[-7,-18],[-18,-18]],2.2),
+    corridor([[9,-22],[18,-22]],2),corridor([[-9,-22],[-18,-22]],2),
+    corridor([[28,-31],[28,-27]],3),corridor([[-28,-31],[-28,-27]],3),corridor([[0,-31],[0,-25]],2.6),
+    corridor([[9,14],[14,14],[14,17],[18,17]],2),corridor([[-9,14],[-14,14],[-14,17],[-18,17]],2),
+    corridor([[-14,23],[14,23]],2),corridor([[-18,-29],[18,-29]],2),
+  ];
+  const innerWalls=[
+    ...house(23,8,31,14,3.8,{s:[25,28],w:[10,12]}),
+    ...house(-31,8,-23,14,3.8,{s:[-28,-25],e:[10,12]}),
+    [-2,-9,-1,-2,3.2],[5,-3,6,4,3.2],
+  ];
+  const platforms=[[-26,-2,-18,8,2.8],[18,-2,26,8,2.8],[-4,-22,4,-15,1.4]];
+  const stairs=[
+    {x1:-30,z1:0,x2:-26,z2:5,dir:'+x',h:2.8},{x1:26,z1:0,x2:30,z2:5,dir:'-x',h:2.8},
+    {x1:-4,z1:-26,x2:4,z2:-22,dir:'+z',h:1.4},{x1:-4,z1:-15,x2:4,z2:-12,dir:'-z',h:1.4},
+  ];
+  const bridges=[[-18,1,18,4,2.8]];
+  const crates=[
+    [30,24,2,1,0],[-30,24,2,1,0],[0,17,1.6,2,1],[25,-15,1.8,1,0],[-25,-15,1.8,1,0],
+    [-22,3,1.3,1,0,2.8],[22,3,1.3,1,0,2.8],[0,2.5,1.4,1,0,2.8],
+    [6,-28,1.5,1,0],[-6,-28,1.5,1,0],[0,-18,1.2,1,0,1.4],
+  ];
+  const sites={A:{rect:[18,-27,36,-11],plant:[28,-18]},B:{rect:[-36,-27,-18,-11],plant:[-28,-18]}};
+  MAPS.push(makeMap({
+    id:'chaomen',name:'潮门',desc:'双点船坞·低位排水渠·码头仓区·横贯吊机猫道·双向桥梯',
+    sky:{top:'#2c5262',mid:'#6e9ca2',bot:'#bfd0c7',fog:0x73989b,fogFar:180,sun:0xffe6b5,sunPos:[35,52,-20],hemi:[0xb8d8d7,0x31484a]},
+    wallTone:0x81949a,accent:0x42c1b2,rooms,corridors,innerWalls,roofs:[],platforms,stairs,bridges,crates,sites,
+    stages:{A:[28,0],B:[-28,0]},
+    defPostList:[{p:[30,-14],look:[28,-2]},{p:[22,3,2.8],look:[28,-10,2.8]},{p:[0,-18,1.4],look:[0,-5,1.4]},{p:[-22,3,2.8],look:[-28,-10,2.8]},{p:[-30,-14],look:[-28,-2]}],
+    atkHolds:{
+      A:[{p:[25,-15],look:[29,-26]},{p:[22,3,2.8],look:[28,-13,2.8]},{p:[34,-14],look:[20,-18]}],
+      B:[{p:[-25,-15],look:[-29,-26]},{p:[-22,3,2.8],look:[-28,-13,2.8]},{p:[-34,-14],look:[-20,-18]}],
+    },
+    smokePoints:{A:[[28,-11],[21,-15]],B:[[-28,-11],[-21,-15]]},chokes:{A:[28,-9],B:[-28,-9]},spawns:spawnSets(),
+    barriers:[{rect:[-39,28.5,39,30.5],side:'atk'},{rect:[18,-11.8,36,-10.8],side:'def'},{rect:[-36,-11.8,-18,-10.8],side:'def'}],
+  }));
+})();
+
+// ============================================================
 // 全地图等比放大：世界 84x84 → 110x110（高度不变），路线更长更有纵深
 // ============================================================
 const K = 1.65;
@@ -1193,7 +1310,7 @@ for(const m of MAPS){
   for(const k of Object.keys(m.sites)){
     const st=m.sites[k];
     st.rect=[sc(st.rect[0]),sc(st.rect[1]),sc(st.rect[2]),sc(st.rect[3])];
-    st.plant=[sc(st.plant[0]),sc(st.plant[1])];
+    st.plant=[sc(st.plant[0]),sc(st.plant[1]),...st.plant.slice(2)];
   }
   for(const b of m.barriers){
     b.rect=[sc(b.rect[0]),sc(b.rect[1]),sc(b.rect[2]),sc(b.rect[3])];
@@ -1201,9 +1318,9 @@ for(const m of MAPS){
     const w=b.rect[2]-b.rect[0], d=b.rect[3]-b.rect[1];
     if(w<d){ b.rect[0]-=.5; b.rect[2]+=.5; } else { b.rect[1]-=.5; b.rect[3]+=.5; }
   }
-  for(const k of Object.keys(m.stages||{})) m.stages[k]=[sc(m.stages[k][0]),sc(m.stages[k][1])];
-  for(const p of m.defPostList){ p.p=[sc(p.p[0]),sc(p.p[1])]; p.look=[sc(p.look[0]),sc(p.look[1])]; }
-  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]){ h.p=[sc(h.p[0]),sc(h.p[1])]; h.look=[sc(h.look[0]),sc(h.look[1])]; }
+  for(const k of Object.keys(m.stages||{})) m.stages[k]=[sc(m.stages[k][0]),sc(m.stages[k][1]),...m.stages[k].slice(2)];
+  for(const p of m.defPostList){ p.p=[sc(p.p[0]),sc(p.p[1]),...p.p.slice(2)]; p.look=[sc(p.look[0]),sc(p.look[1]),...p.look.slice(2)]; }
+  for(const k of Object.keys(m.atkHolds||{})) for(const h of m.atkHolds[k]){ h.p=[sc(h.p[0]),sc(h.p[1]),...h.p.slice(2)]; h.look=[sc(h.look[0]),sc(h.look[1]),...h.look.slice(2)]; }
   for(const k of Object.keys(m.smokePoints||{})) m.smokePoints[k]=m.smokePoints[k].map(pt=>[sc(pt[0]),sc(pt[1])]);
   for(const k of Object.keys(m.chokes||{})) m.chokes[k]=[sc(m.chokes[k][0]),sc(m.chokes[k][1])];
   m.spawns.atk = m.spawns.atk.map(p=>[sc(p[0]),sc(p[1])]);
