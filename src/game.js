@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=27';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=27';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=27';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=27';
-import { initAbilities, roundRefill } from './abilities.js?v=27';
-import { initBotAI, resetBotRound } from './bots.js?v=27';
-import { inSite } from './map.js?v=27';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=27';
-import { buildViewModel, switchSlot } from './player.js?v=27';
-import { sfx } from './audio.js?v=27';
+import { G } from './state.js?v=28';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=28';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=28';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=28';
+import { initAbilities, roundRefill } from './abilities.js?v=28';
+import { initBotAI, resetBotRound } from './bots.js?v=28';
+import { inSite } from './map.js?v=28';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=28';
+import { buildViewModel, switchSlot } from './player.js?v=28';
+import { sfx } from './audio.js?v=28';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];

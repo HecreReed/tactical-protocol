@@ -67,6 +67,11 @@ const P = {
   empress:    '<path d="M4.5 18.5h15"/><path d="M4.5 18.5L3 8l5 4 4-7 4 7 5-4-1.5 10.5z"/><circle cx="12" cy="13.5" r="1.3" fill="currentColor" stroke="none"/>',
   // 灵愈
   seekers:    '<circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 4.5a7.5 7.5 0 0 1 7.5 7.5" opacity=".8"/><path d="M12 19.5A7.5 7.5 0 0 1 4.5 12" opacity=".8"/><path d="M17 15.5l3.5 3.5M7 8.5L3.5 5" opacity=".55"/>',
+  // 新英雄
+  headhunter: '<circle cx="12" cy="13" r="4.2"/><path d="M12 8.8V6.2h2.5"/><path d="M16 3.8a.9.9 0 0 1-1.8 0h1.8z" opacity=".7"/><circle cx="12" cy="13" r=".8" fill="currentColor" stroke="none"/>',
+  tourdeforce:'<path d="M4.5 18.5h15"/><path d="M12 18.5V7"/><circle cx="12" cy="12" r="5.5"/><path d="M7.5 9.5l5.5-5.5 5.5 5.5" opacity=".6"/><circle cx="12" cy="4.5" r=".8" fill="currentColor" stroke="none"/>',
+  nightfall:  '<path d="M4 19h16"/><circle cx="12" cy="10" r="6.5"/><circle cx="12" cy="10" r="0.7" fill="currentColor" stroke="none"/><path d="M12 2.8V.4M17.2 5.2L18.8 3.6M6.8 5.2L5.2 3.6" opacity=".6"/>',
+  cocoon:     '<ellipse cx="12" cy="14" rx="5.5" ry="7"/><path d="M7.5 10.5a4.5 4.5 0 0 1 9 0"/><path d="M9 7.8l1.2-1M15 7.8l-1.2-1M5.5 14h13M5.5 16h13M5.5 18h13" opacity=".6"/>',
 };
 
 const FALLBACK = '<circle cx="12" cy="12" r="7"/>';

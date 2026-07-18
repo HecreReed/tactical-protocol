@@ -203,7 +203,7 @@ export const AGENTS = {
     }
   },
   meiying: {
-    name:'魅影', role:'决斗者', emoji:'💜', desc:'嗜杀女皇·击杀吞噬回血遁形', color:0xc45ad0,
+    name:'魅影', role:'决斗者', emoji:'💜', desc:'嗜杀女皇·击杀吞噬回血复盾', color:0xc45ad0,
     ultCost:7, ab:{
       c:{name:'魅惑之眼',cost:250,max:1,start:1,cd:0,type:'paranoia'},
       q:{name:'吞噬',cost:200,max:2,start:1,cd:0,type:'devour'},
@@ -218,6 +218,51 @@ export const AGENTS = {
       q:{name:'引导之光',cost:250,max:2,start:1,cd:0,type:'flash'},
       e:{name:'开拓猛虎',cost:0,max:1,start:1,cd:30,type:'boomBot',free:true},
       x:{name:'追猎之灵',cost:0,max:1,start:0,cd:0,type:'seekers',free:true},
+    }
+  },
+  jidian: {
+    name:'疾电', role:'决斗者', emoji:'⚡', desc:'电能疾行·超频冲锋雷霆天降', color:0x58b8ff,
+    ultCost:7, ab:{
+      c:{name:'高压电墙',cost:200,max:1,start:1,cd:0,type:'firewall'},
+      q:{name:'电弧震荡',cost:250,max:2,start:1,cd:0,type:'shock'},
+      e:{name:'超频疾驰',cost:0,max:1,start:1,cd:24,type:'stim',free:true},
+      x:{name:'雷霆天降',cost:0,max:1,start:0,cd:0,type:'orbital',free:true},
+    }
+  },
+  chaoxi: {
+    name:'潮汐', role:'控场者', emoji:'🌊', desc:'操水控场·水幕穹顶分割战场', color:0x3fa8a0,
+    ultCost:8, ab:{
+      c:{name:'高潮水墙',cost:200,max:1,start:1,cd:0,type:'toxicWall'},
+      q:{name:'涌潮缓流',cost:200,max:2,start:1,cd:0,type:'slowProj'},
+      e:{name:'水幕穹顶',cost:0,max:1,start:1,cd:28,type:'cage',free:true},
+      x:{name:'惊涛骇浪',cost:0,max:1,start:0,cd:0,type:'bigStun',free:true},
+    }
+  },
+  shimeng: {
+    name:'噬梦', role:'先锋', emoji:'🌑', desc:'梦魇猎手·恐惧凝视猎影追踪', color:0x6a5acd,
+    ultCost:8, ab:{
+      c:{name:'缚灵陷阱',cost:200,max:2,start:1,cd:0,type:'shock'},
+      q:{name:'骇惧凝视',cost:250,max:1,start:1,cd:0,type:'paranoia'},
+      e:{name:'猎影兽',cost:0,max:1,start:1,cd:28,type:'boomBot',free:true},
+      x:{name:'夜幕低语',cost:0,max:1,start:0,cd:0,type:'nightfall',free:true},
+    }
+  },
+  zhisuo: {
+    name:'织锁', role:'哨卫', emoji:'🕸️', desc:'区域封锁·声波哨戒困敌成茧', color:0xe0b8c8,
+    ultCost:8, ab:{
+      c:{name:'音波哨兵',cost:200,max:1,start:1,cd:0,type:'alarmBot'},
+      q:{name:'重力之网',cost:200,max:2,start:1,cd:0,type:'slowProj'},
+      e:{name:'屏障网格',cost:0,max:1,start:1,cd:40,type:'wall',free:true},
+      x:{name:'湮灭之茧',cost:0,max:1,start:0,cd:0,type:'cocoon',free:true},
+    }
+  },
+  bojue: {
+    name:'伯爵', role:'哨卫', emoji:'🎩', desc:'枪匠贵族·瞬移布防金枪定局', color:0xd8b45a,
+    ultCost:8, ab:{
+      c:{name:'瞬影传送',cost:150,max:1,start:1,cd:0,type:'shadowStep'},
+      q:{name:'猎头者',cost:300,max:1,start:1,cd:0,type:'headhunter'},
+      e:{name:'惊骇陷阱',cost:0,max:1,start:1,cd:30,type:'tripwire',free:true},
+      x:{name:'决胜者',cost:0,max:1,start:0,cd:0,type:'tourdeforce',free:true},
     }
   },
 };

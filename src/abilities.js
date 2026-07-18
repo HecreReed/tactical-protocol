@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=27';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=27';
-import { AGENTS } from './config.js?v=27';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=27';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=27';
-import { inAnyOpen, colQuery } from './map.js?v=27';
-import { sfx } from './audio.js?v=27';
-import { raySphere } from './utils.js?v=27';
+import { G } from './state.js?v=28';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=28';
+import { AGENTS } from './config.js?v=28';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=28';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=28';
+import { inAnyOpen, colQuery } from './map.js?v=28';
+import { sfx } from './audio.js?v=28';
+import { raySphere } from './utils.js?v=28';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -668,8 +668,11 @@ export function performAbility(ent, key, slot, def, opts={}){
     // ---- 魅影 ----
     case 'devour': {
       if(G.now - (ent.lastKillAt||-99) > 6){ used=false; if(ent.isPlayer){ sfx.deny(); G.hooks.hudMsg?.('吞噬：需要在击杀后 6 秒内使用'); } break; }
-      if(ent.hp >= 100){ used=false; if(ent.isPlayer) sfx.deny(); break; }
-      ent.healQueue = Math.min(ent.healQueue + 80, 100 - ent.hp + 5);
+      ent.healQueue = Math.min(ent.healQueue + 80, Math.max(0, 100 - ent.hp) + 5);
+      // 吞噬同时恢复并强化护盾：+25 护盾（上限 50）
+      ent.armor = Math.min(50, ent.armor + 25);
+      ent.armorMax = Math.max(ent.armorMax, ent.armor);
+      if(ent.isPlayer) G.hooks.hudMsg?.('吞噬：生命回复 + 护盾强化');
       sfx.heal();
       break;
     }
@@ -715,6 +718,65 @@ export function performAbility(ent, key, slot, def, opts={}){
       }
       sfx.reveal();
       if(ent.isPlayer) G.hooks.hudMsg?.(`追猎之灵：锁定了 ${foes.length} 名敌人`);
+      break;
+    }
+    // ---- 噬梦 ----
+    case 'nightfall': {
+      revealArea(ent.pos.clone().setY(0), 26, 3.5, ent.team);
+      coneDaze(ent, 24, .55, 3.5);
+      for(const e of G.ents){
+        if(!e.alive || e.team===ent.team) continue;
+        if(dist2d(ent.pos, e.pos) < 24){ e.slowUntil = Math.max(e.slowUntil||0, G.now + 4); }
+      }
+      sfx.ultReady();
+      if(ent.isPlayer) G.hooks.hudMsg?.('夜幕低语：区域显形 + 大范围震慑减速');
+      break;
+    }
+    // ---- 伯爵 ----
+    case 'headhunter': {
+      ent.weapons.secondary = {
+        id:'headhunter',
+        def:{ name:'猎头者', cat:'pistol', mag:8, res:0, fi:.15, rl:0, alt:false, pellets:1,
+          dmg:{0:{h:159,b:55,l:46}, 30:{h:145,b:50,l:42}},
+          spread:{base:.55,mv:.8,bloom:1.4}, recoil:{perShot:14,cap:100,wander:1.8,decay:32},
+          ads:{}, vm:{x:.18,y:-.14,z:-.33,sc:.042,rot:[0,0,.05]} },
+        ammo:8, reserve:0, nextFire:0, reloadEnd:0, shots:0, lastShot:0,
+      };
+      ent.slot = 'secondary';
+      if(ent.isPlayer) { G.hooks.rebuildViewModel?.(); }
+      sfx.buy();
+      break;
+    }
+    case 'tourdeforce': {
+      const w = {
+        id:'tourdeforce',
+        def:{ name:'决胜者', cat:'sniper', mag:5, res:0, fi:.9, rl:0, alt:false, pellets:1,
+          dmg:{0:{h:255,b:150,l:120}, 50:{h:240,b:140,l:110}},
+          spread:{base:.22,mv:2.5,bloom:3.0}, recoil:{perShot:45,cap:240,wander:4,decay:18},
+          ads:{fov:18,spread:.06,mv:.4,recoil:.5,scope:true}, vm:{x:.18,y:-.14,z:-.49,sc:.06,rot:[0,0,.02]} },
+        ammo:5, reserve:0, nextFire:0, reloadEnd:0, shots:0, lastShot:0,
+      };
+      if(ent.weapons.primary) ent.weapons.primary = ent.weapons.secondary;
+      ent.weapons.primary = w;
+      ent.slot = 'primary';
+      if(ent.isPlayer) { G.hooks.rebuildViewModel?.(); }
+      sfx.ultReady();
+      break;
+    }
+    // ---- 织锁 ----
+    case 'cocoon': {
+      // 选中半径内最近敌人（无视墙体），束缚禁锢
+      const t = G.ents.filter(e=>e.alive && e.team!==ent.team && dist2d(e.pos, ent.pos) < 16)
+        .sort((a,b)=>dist2d(a.pos,ent.pos)-dist2d(b.pos,ent.pos))[0];
+      if(!t){ used=false; if(ent.isPlayer) sfx.deny(); break; }
+      t.revealedUntil = Math.max(t.revealedUntil||0, G.now + 6);
+      t.slowUntil = Math.max(t.slowUntil||0, G.now + 7);
+      t.suppressedUntil = Math.max(t.suppressedUntil||0, G.now + 7);
+      t.dazeUntil = Math.max(t.dazeUntil||0, G.now + 4);
+      if(t.isPlayer) G.hooks.hudMsg?.('你被湮灭之茧束缚了！');
+      if(!t.isPlayer && t.ai){ t.ai.burstLeft = 0; }
+      sfx.beamFire(G.player ? t.pos.distanceTo(G.player.pos) : 0);
+      if(ent.isPlayer) G.hooks.hudMsg?.('湮灭之茧：拘捕一名敌人');
       break;
     }
     // ---- 复刻原版新技能 ----
@@ -774,7 +836,8 @@ function castOrbital(ent, p){
 // ============ AI 定点施放接口 ============
 // AI 通过世界坐标目标点施放，不依赖视角。返回是否成功。
 const BOT_AREA_JITTER = new Set(['nade','bignade','fragNade','quake','suppressNade','acidPool','hotHands',
-  'toxicSmoke','toxicDome','cage','molly','shock','smokeSky','wallFlash','flash']);
+  'toxicSmoke','toxicDome','cage','molly','shock','smokeSky','wallFlash','flash','headhunter','tourdeforce',
+  'nightfall','cocoon','devour','dismiss','empress','seekers']);
 export function botCast(bot, key, point, target){
   if(!bot.alive) return false;
   const ph = G.match?.phase;
@@ -855,6 +918,7 @@ export function botCast(bot, key, point, target){
     case 'blastjump': case 'revealAll': case 'nullPulse': case 'bigStun': case 'stunWave': case 'turret':
     case 'stimBeacon': case 'droneScan': case 'boomBot': case 'lockdown':
     case 'devour': case 'dismiss': case 'empress': case 'seekers':
+    case 'nightfall': case 'cocoon': case 'headhunter': case 'tourdeforce':
       return useAbility(bot, key);
     case 'hotHands': {
       const p = V3(point.x, 0, point.z);
@@ -952,7 +1016,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=27').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=28').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

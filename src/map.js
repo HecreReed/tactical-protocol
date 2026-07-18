@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=27";
-import { V3, rayAABB, dist2d } from "./utils.js?v=27";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=27";
+import { G } from "./state.js?v=28";
+import { V3, rayAABB, dist2d } from "./utils.js?v=28";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=28";
 const HALF = WORLD/2;
 // 每图主题：mountain 山地起伏 / city 城市天际 / temple 庙宇屋脊 / harbor 港口集装箱
 const MAP_THEMES = { chongqing:'mountain', liexia:'mountain', xuefeng:'mountain',

@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=27';
-import { buildMap } from './map.js?v=27';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=27';
-import { initAudio } from './audio.js?v=27';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=27';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=27';
-import { updateBots } from './bots.js?v=27';
-import { startMatch, updateGame } from './game.js?v=27';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=27';
-import { warmUpFX } from './effects.js?v=27';
+import { G } from './state.js?v=28';
+import { buildMap } from './map.js?v=28';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=28';
+import { initAudio } from './audio.js?v=28';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=28';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=28';
+import { updateBots } from './bots.js?v=28';
+import { startMatch, updateGame } from './game.js?v=28';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=28';
+import { warmUpFX } from './effects.js?v=28';
 
 let started = false;
 let sun = null;

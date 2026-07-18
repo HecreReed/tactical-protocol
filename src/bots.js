@@ -1,10 +1,10 @@
-import { G } from './state.js?v=27';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=27';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=27';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=27';
-import { useAbility, botCast } from './abilities.js?v=27';
-import { removeDrop } from './effects.js?v=27';
-import { sfx } from './audio.js?v=27';
+import { G } from './state.js?v=28';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=28';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=28';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=28';
+import { useAbility, botCast } from './abilities.js?v=28';
+import { removeDrop } from './effects.js?v=28';
+import { sfx } from './audio.js?v=28';
 
 const THINK_DT = .12;
 
@@ -653,6 +653,92 @@ function botAbilities(bot){
         const near = G.ents.filter(e=>e.alive && e.team!==bot.team && dist2d(e.pos,bot.pos)<15).length;
         if(near >= 2) useAbility(bot,'x');
       }
+      break;
+    }
+    case 'jidian': {
+      // 疾电：进点开高压电墙造势，追猎时电弧震荡，低血量超频跑路
+      if(side==='atk' && executing && a.goal && bot.ab.c.n>0 && !a.flags.fw && tryGate(a,'c',5)){
+        a.flags.fw = true;
+        bot.yaw = yawTo(bot.pos, a.goal);
+        useAbility(bot,'c');
+      }
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.q.n>0 && tryGate(a,'q',8))
+        botCast(bot,'q', a.lastSeenPos);
+      if(inCombat && dist2d(bot.pos,t.pos)<14 && bot.ab.q.n>0 && tryGate(a,'q',10))
+        botCast(bot,'q', t.pos);
+      if(bot.hp<40 && inCombat && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8)) useAbility(bot,'e');
+      if(bot.ult>=7 && inCombat && tryGate(a,'x',10)){
+        const dest = executing && a.goal ? a.goal : t.pos;
+        botCast(bot,'x', dest);
+      }
+      break;
+    }
+    case 'chaoxi': {
+      // 潮汐：进点水幕穹顶分割战场，缓流减速挫敌冲锋
+      if((side==='atk' && executing) || (side==='def' && sp.state==='planted')){
+        if(bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.cage && tryGate(a,'e',5)){
+          a.flags.cage = true;
+          botCast(bot,'e', executing ? a.goal || bot.pos : sp.pos);
+        }
+        if(bot.ab.c.n>0 && !a.flags.wall && tryGate(a,'c',4)){
+          a.flags.wall = true;
+          bot.yaw = yawTo(bot.pos, executing ? (a.goal||bot.pos) : sp.pos);
+          useAbility(bot,'c');
+        }
+      }
+      if(side==='def' && inCombat && dist2d(bot.pos,t.pos)<20 && bot.ab.q.n>0 && tryGate(a,'q',12))
+        botCast(bot,'q', t.pos);
+      if(bot.ult>=8 && (executing || enemyChanneling || (side==='def'&&sp.state==='planted')) && tryGate(a,'x',10))
+        useAbility(bot,'x');
+      break;
+    }
+    case 'shimeng': {
+      // 噬梦：骇惧凝视致盲→放猎影兽追击→缚灵陷阱炸残→夜幕低语清场
+      if(inCombat && dist2d(bot.pos,t.pos)<16 && bot.ab.q.n>0 && !a.flags.para && tryGate(a,'q',6)){
+        a.flags.para = true;
+        botCast(bot,'q', t.pos);
+      }
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8)){
+        bot.yaw = yawTo(bot.pos, a.lastSeenPos);
+        useAbility(bot,'e');
+      }
+      if(enemyChanneling && bot.ab.c.n>0 && tryGate(a,'c',6)) botCast(bot,'c', enemyChanneling.pos);
+      if(bot.ult>=8 && ((side==='atk'&&executing) || (side==='def'&&sp.state==='planted') || inCombat) && tryGate(a,'x',10)){
+        bot.yaw = yawTo(bot.pos, executing ? (a.goal||bot.pos) : sp.pos||bot.pos);
+        useAbility(bot,'x');
+      }
+      break;
+    }
+    case 'zhisuo': {
+      // 织锁：驻点布防音波哨兵+屏障网格，回防时重力之网拦截
+      const settledD = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
+      if(settledD && bot.ab.c.n>0 && !a.flags.alarmD && tryGate(a,'c',3)){
+        a.flags.alarmD = true;
+        const ch = nearestChokeTo(bot.pos);
+        botCast(bot,'c', ch || V3(bot.pos.x+rand(-3,3),0,bot.pos.z+rand(-3,3)));
+      }
+      if(settledD && bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.wallD && tryGate(a,'e',5)){
+        a.flags.wallD = true;
+        bot.yaw = yawTo(bot.pos, nearestChokeTo(bot.pos)||V3(bot.pos.x,bot.pos.y,bot.pos.z-8));
+        useAbility(bot,'e');
+      }
+      if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<20 && bot.ab.q.n>0 && tryGate(a,'q',8))
+        botCast(bot,'q', sp.pos);
+      if(bot.ult>=8 && enemyChanneling && tryGate(a,'x',6)) useAbility(bot,'x');
+      break;
+    }
+    case 'bojue': {
+      // 伯爵：进场布惊骇陷阱，遭遇时传送到安全拉开距离，掏猎头者/决胜者
+      if(side==='atk' && executing && a.goal && bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.trip && tryGate(a,'e',5)){
+        a.flags.trip = true;
+        botCast(bot,'e', a.goal);
+      }
+      if(hurt && inCombat && dist2d(bot.pos,t.pos)<14 && bot.ab.c.n>0 && tryGate(a,'c',8)){
+        bot.yaw = yawTo(bot.pos, t.pos) + Math.PI;
+        useAbility(bot,'c');
+      }
+      if(inCombat && !bot.weapons.primary && bot.ab.q.n>0 && tryGate(a,'q',3)) useAbility(bot,'q');
+      if(bot.ult>=8 && inCombat && dist2d(bot.pos,t.pos)>6 && tryGate(a,'x',12)) useAbility(bot,'x');
       break;
     }
     case 'yinglie': {
