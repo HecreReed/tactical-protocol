@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
+    "test": "node --test",
+    "sync:agents": "node tools/sync_agents.mjs",
     "validate": "node --input-type=module -e \"import {validateMaps} from './src/map.js'; console.log(JSON.stringify(validateMaps(),null,2))\""
   },
   "dependencies": {

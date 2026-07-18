@@ -93,7 +93,7 @@ export const WEAPONS = [
     ads:{fov:0}, vm:{x:.14,y:-.2,z:-.28,sc:.035,rot:[0.6,0,0]}, name:'刀', range:2.6, alt:false },
 ];
 
-export const AGENTS = {
+const LEGACY_AGENTS = {
   fengying: {
     name:'风影', role:'决斗者', emoji:'🌀', desc:'高机动位移刺客·被动:空中按住空格滑翔', color:0x8fd3ff,
     ultCost:7, ab:{
@@ -267,6 +267,7 @@ export const AGENTS = {
   },
 };
 
-export const AGENT_LIST = Object.keys(AGENTS);
+export { OFFICIAL_AGENTS as AGENTS, OFFICIAL_AGENT_LIST as AGENT_LIST };
 export const WS = WEAPONS;
 export const WIDE = id => WEAPONS.find(w=>w.id===id);
+import { AGENTS as OFFICIAL_AGENTS, AGENT_LIST as OFFICIAL_AGENT_LIST } from './agentCatalog.js';
