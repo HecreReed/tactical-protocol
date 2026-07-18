@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=28';
-import { buildMap } from './map.js?v=28';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=28';
-import { initAudio } from './audio.js?v=28';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=28';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=28';
-import { updateBots } from './bots.js?v=28';
-import { startMatch, updateGame } from './game.js?v=28';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=28';
-import { warmUpFX } from './effects.js?v=28';
+import { G } from './state.js?v=29';
+import { buildMap } from './map.js?v=29';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=29';
+import { initAudio } from './audio.js?v=29';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=29';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=29';
+import { updateBots } from './bots.js?v=29';
+import { startMatch, updateGame } from './game.js?v=29';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=29';
+import { warmUpFX } from './effects.js?v=29';
 
 let started = false;
 let sun = null;
@@ -115,32 +115,54 @@ function initPointerLock(){
   });
 }
 
-let last = performance.now(), frameNo = 0;
+let last = performance.now(), frameNo = 0, timeOffset = 0;
+function stepFrame(dt){
+  G.dt=dt;
+  frameNo++;
+  if((frameNo&1)===0)G.renderer.shadowMap.needsUpdate=true;
+  if(started){
+    updateGame(dt);
+    if(G.player)updatePlayer(dt);else if(G.observer)updateObserver(dt);
+    updateBots(dt);updateProjectiles(dt);updateDeployables(dt);tickHealAndZones(dt);
+    updateFX(dt);pulseBarriers();updateHUD();
+  }
+}
+
 function loop(){
   requestAnimationFrame(loop);
   const nowMs = performance.now();
   let dt = (nowMs - last)/1000;
   last = nowMs;
   dt = Math.min(dt, .04);
-  G.dt = dt;
-  G.now = nowMs/1000;
-  frameNo++;
-  if((frameNo & 1) === 0) G.renderer.shadowMap.needsUpdate = true;
-
-  if(started){
-    updateGame(dt);
-    if(G.player) updatePlayer(dt);
-    else if(G.observer) updateObserver(dt);
-    updateBots(dt);
-    updateProjectiles(dt);
-    updateDeployables(dt);
-    tickHealAndZones(dt);
-    updateFX(dt);
-    pulseBarriers();
-    updateHUD();
-  }
+  G.now = nowMs/1000 + timeOffset;
+  stepFrame(dt);
   G.renderer.render(G.scene, G.camera);
 }
+
+window.advanceTime = ms => {
+  const steps=Math.max(1,Math.round(ms/(1000/60)));
+  timeOffset += steps/60;
+  for(let i=0;i<steps;i++){G.now+=1/60;stepFrame(1/60);}
+  G.renderer?.render(G.scene,G.camera);
+};
+
+window.render_game_to_text = () => {
+  const player=G.player;
+  const payload={
+    coordinateSystem:'x east-west, y up, z north-south; positions are world meters',
+    mode:G.match?.phase||'agent-select',map:G.map?.id||null,
+    score:G.match?.score||null,round:G.match?.round||0,time:G.now,
+    player:player?{agent:player.agent,alive:player.alive,hp:Math.round(player.hp),armor:player.armor,
+      position:{x:+player.pos.x.toFixed(2),y:+player.pos.y.toFixed(2),z:+player.pos.z.toFixed(2)},
+      velocity:{x:+player.vel.x.toFixed(2),y:+player.vel.y.toFixed(2),z:+player.vel.z.toFixed(2)},
+      abilities:Object.fromEntries(Object.entries(player.ab).map(([key,value])=>[key,{name:value.def.name,charges:value.n,cooldown:key==='e'?Math.max(0,+(player.abCd.e-G.now).toFixed(2)):0}])),
+      resources:player.resources}:null,
+    controlMode:G.controlMode?{type:G.controlMode.unit?.scoutType||G.controlMode.unit?.type,until:G.controlMode.until}:null,
+    entities:G.ents.filter(e=>e.alive).map(e=>({id:e.id,team:e.team,agent:e.agent,hp:Math.round(e.hp),x:+e.pos.x.toFixed(1),y:+e.pos.y.toFixed(1),z:+e.pos.z.toFixed(1)})),
+    utilities:G.utilities.items.map(u=>({id:u.id,type:u.type,team:u.team,hp:u.hp,active:u.active})),
+  };
+  return JSON.stringify(payload);
+};
 
 function boot(){
   initThree();

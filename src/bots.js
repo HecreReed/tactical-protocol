@@ -1,10 +1,11 @@
-import { G } from './state.js?v=28';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=28';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=28';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=28';
-import { useAbility, botCast } from './abilities.js?v=28';
-import { removeDrop } from './effects.js?v=28';
-import { sfx } from './audio.js?v=28';
+import { G } from './state.js?v=29';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=29';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=29';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=29';
+import { useAbility, botCast } from './abilities.js?v=29';
+import { removeDrop } from './effects.js?v=29';
+import { sfx } from './audio.js?v=29';
+import { AGENTS } from './config.js?v=29';
 
 const THINK_DT = .12;
 
@@ -682,7 +683,7 @@ function botAbilities(bot){
       break;
     }
     case 'jidian': {
-      // 疾电：进点开高压电墙造势，追猎时电弧震荡，低血量超频跑路
+      // Neon：进点开高压电墙造势，追猎时电弧震荡，低血量超频跑路
       if(side==='atk' && executing && a.goal && bot.ab.c.n>0 && !a.flags.fw && tryGate(a,'c',5)){
         a.flags.fw = true;
         bot.yaw = yawTo(bot.pos, a.goal);
@@ -700,7 +701,7 @@ function botAbilities(bot){
       break;
     }
     case 'chaoxi': {
-      // 潮汐：进点水幕穹顶分割战场，缓流减速挫敌冲锋
+      // Harbor：进点水幕穹顶分割战场，缓流减速挫敌冲锋
       if((side==='atk' && executing) || (side==='def' && sp.state==='planted')){
         if(bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.cage && tryGate(a,'e',5)){
           a.flags.cage = true;
@@ -719,7 +720,7 @@ function botAbilities(bot){
       break;
     }
     case 'shimeng': {
-      // 噬梦：骇惧凝视致盲→放猎影兽追击→缚灵陷阱炸残→夜幕低语清场
+      // Fade：骇惧凝视致盲→放猎影兽追击→缚灵陷阱炸残→夜幕低语清场
       if(inCombat && dist2d(bot.pos,t.pos)<16 && bot.ab.q.n>0 && !a.flags.para && tryGate(a,'q',6)){
         a.flags.para = true;
         botCast(bot,'q', t.pos);
@@ -736,7 +737,7 @@ function botAbilities(bot){
       break;
     }
     case 'zhisuo': {
-      // 织锁：驻点布防音波哨兵+屏障网格，回防时重力之网拦截
+      // Deadlock：驻点布防音波哨兵+屏障网格，回防时重力之网拦截
       const settledD = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
       if(settledD && bot.ab.c.n>0 && !a.flags.alarmD && tryGate(a,'c',3)){
         a.flags.alarmD = true;
@@ -754,7 +755,7 @@ function botAbilities(bot){
       break;
     }
     case 'bojue': {
-      // 伯爵：进场布惊骇陷阱，遭遇时传送到安全拉开距离，掏猎头者/决胜者
+      // Chamber：进场布惊骇陷阱，遭遇时传送到安全拉开距离，掏猎头者/决胜者
       if(side==='atk' && executing && a.goal && bot.ab.e.n>0 && G.now>bot.abCd.e && !a.flags.trip && tryGate(a,'e',5)){
         a.flags.trip = true;
         botCast(bot,'e', a.goal);
@@ -768,7 +769,7 @@ function botAbilities(bot){
       break;
     }
     case 'yinglie': {
-      // 影猎：到位布防绊网+囚笼封口，追击时放幽灵之眼
+      // Cypher：到位布防绊网+囚笼封口，追击时放幽灵之眼
       const settled = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
       if(settled && bot.ab.c.n>0 && !a.flags.wire && tryGate(a,'c',3)){
         a.flags.wire = true;
@@ -791,7 +792,7 @@ function botAbilities(bot){
       break;
     }
     case 'meiying': {
-      // 魅影：进点致盲，击杀后吞噬回血，残血遁形拉扯
+      // Reyna：进点致盲，击杀后吞噬回血，残血遁形拉扯
       if(side==='atk' && executing && a.goal && dist2d(bot.pos,a.goal)<16 && bot.ab.c.n>0 && !a.flags.para && tryGate(a,'c',4)){
         a.flags.para = true;
         botCast(bot,'c', a.goal);
@@ -803,7 +804,7 @@ function botAbilities(bot){
       break;
     }
     case 'lingyu': {
-      // 灵愈：群疗队友，进点闪光开路，追猎之灵收局
+      // Skye：群疗队友，进点闪光开路，追猎之灵收局
       if(bot.ab.c.n>0 && !inCombat && safeTime){
         let tgt = null;
         for(const e of G.ents) if(e.alive && e.team===bot.team && e.hp<60 && dist2d(e.pos,bot.pos)<12)

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=28';
-import { V3 } from './utils.js?v=28';
-import { sfx } from './audio.js?v=28';
+import { G } from './state.js?v=29';
+import { V3 } from './utils.js?v=29';
+import { sfx } from './audio.js?v=29';
 import { registerUtility } from './abilityRuntime.js';
 
 const pools = { tracers:[], flashes:[] };
@@ -99,7 +99,7 @@ export function targetRing(pos, r, dur, color=0xff4655, owner=null){
   setTimeout(()=>scene.remove(ring), dur*1000);
 }
 
-// ---- 蛛影：哨戒炮塔 ----
+// ---- Killjoy/Cypher：哨戒炮塔 ----
 export function spawnTurret(pos, yaw, ent){
   const g = new THREE.Group();
   const teamCol = ent.team==='ally' ? 0x3fb3ad : 0xd04555;
@@ -130,7 +130,7 @@ export function spawnTurret(pos, yaw, ent){
   return t;
 }
 
-// ---- 蛛影：绊网 ----
+// ---- Killjoy/Cypher：绊网 ----
 export function spawnTrap(pos, yaw, ent){
   const g = new THREE.Group();
   const postMat = new THREE.MeshStandardMaterial({color:0x2a333c, roughness:.8});

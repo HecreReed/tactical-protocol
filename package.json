@@ -7,9 +7,14 @@
     "start": "python3 -m http.server 8080",
     "test": "node --test",
     "sync:agents": "node tools/sync_agents.mjs",
+    "smoke": "node tools/smoke_game.mjs",
     "validate": "node --input-type=module -e \"import {validateMaps} from './src/map.js'; console.log(JSON.stringify(validateMaps(),null,2))\""
   },
   "dependencies": {
     "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1",
+    "pngjs": "^7.0.0"
   }
 }

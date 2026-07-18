@@ -1,13 +1,13 @@
-import { G, saveSettings } from './state.js?v=28';
-import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=28';
-import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=28';
-import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=28';
-import { curWeapon, eyePos, losBlocked } from './combat.js?v=28';
-import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=28';
-import { buyAbility, sellAbility } from './abilities.js?v=28';
-import { spawnSmoke, targetRing } from './effects.js?v=28';
-import { abilityIcon } from './icons.js?v=28';
-import { sfx, setVolume } from './audio.js?v=28';
+import { G, saveSettings } from './state.js?v=29';
+import { WEAPONS, AGENTS, SKINS, DIFFICULTIES, L_ARMOR_COST, H_ARMOR_COST } from './config.js?v=29';
+import { MAPS, inAnyOpen, snapToNav, WORLD } from './map.js?v=29';
+import { fmtTime, clamp, dist2d, V3 } from './utils.js?v=29';
+import { curWeapon, eyePos, losBlocked } from './combat.js?v=29';
+import { tryBuyWeapon, tryBuyArmor, trySellWeapon, trySellArmor, sideOf } from './game.js?v=29';
+import { buyAbility, sellAbility } from './abilities.js?v=29';
+import { spawnSmoke, targetRing } from './effects.js?v=29';
+import { abilityIcon } from './icons.js?v=29';
+import { sfx, setVolume } from './audio.js?v=29';
 
 const $ = id => document.getElementById(id);
 let els = {};
@@ -269,6 +269,7 @@ export function showAgentSelect(cb){
   const toStep = (n)=>{
     els.stepMaps.classList.toggle('hidden', n!==1);
     els.stepAgents.classList.toggle('hidden', n!==2);
+    els.agentSelect.scrollTop = 0;
     if(els.selectSub) els.selectSub.textContent = n===1 ? '第 1 步 · 选择地图与难度' : '第 2 步 · 选择你的特工';
   };
   $('toAgents').onclick = ()=> toStep(2);
@@ -307,7 +308,7 @@ export function showAgentSelect(cb){
     const card = document.createElement('div');
     card.className = 'agentCard';
     card.style.setProperty('--ac', '#'+a.color.toString(16).padStart(6,'0'));
-    card.innerHTML = `<img class="portrait" src="${a.portrait}" alt="${a.name}" loading="lazy"><h2>${a.name}</h2><div class="role">${a.role} · ${a.desc}</div>
+    card.innerHTML = `<img class="portrait" src="${a.portrait}" alt="${a.name}"><h2>${a.name}</h2><div class="role">${a.role} · ${a.desc}</div>
       <ul>
         <li>${abilityIcon(a.ab.c)}<span class="k">C</span><b>${a.ab.c.name}</b></li>
         <li>${abilityIcon(a.ab.q)}<span class="k">Q</span><b>${a.ab.q.name}</b></li>

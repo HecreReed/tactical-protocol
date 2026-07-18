@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=28';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=28';
-import { SKINS, AGENTS } from './config.js?v=28';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=28';
-import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=28';
-import { tracer, spawnSmoke } from './effects.js?v=28';
-import { sfx } from './audio.js?v=28';
+import { G, sens } from './state.js?v=29';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=29';
+import { SKINS, AGENTS } from './config.js?v=29';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=29';
+import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=29';
+import { tracer, spawnSmoke } from './effects.js?v=29';
+import { sfx } from './audio.js?v=29';
 import { useNeonSlide } from './agentMechanics.js';
 
 const P = {
@@ -58,7 +58,7 @@ export function initPlayerInput(){
     if(!G.player) return;
     const p = G.player;
     if(!p.alive && p.agent!=='clove') return;
-    // 天穹战术地图打开时：E/Esc/其他技能键关闭地图
+    // Brimstone战术地图打开时：E/Esc/其他技能键关闭地图
     if(G.hooks.smokeMapKey?.(e.code)) return;
     // 下烟模式中：用左键确认，其他按键取消
     if(G.smokeMode && G.smokeMode.agent === p && !G.mouse.lmb){
@@ -384,7 +384,7 @@ export function updatePlayer(dt){
   if(canMove && G.keys['Space'] && p.grounded && !p.channel){
     p.vel.y = 5.6; p.grounded = false;
   }
-  // 风影被动：空中按住空格滑翔（缓降）
+  // Jett被动：空中按住空格滑翔（缓降）
   p.glide = p.agent==='jett' && !p.grounded && !!G.keys['Space'] && canMove;
   moveEntity(p, dt);
 
@@ -501,7 +501,7 @@ export function updatePlayer(dt){
   // interact (plant/defuse)
   G.hooks.interactTick?.(p, dt);
 
-  // 下烟模式（暗幕 · 原版幽影式）：瞄准指针可越过墙体投至远处地面，左键投放
+  // 下烟模式（Omen · 原版幽影式）：瞄准指针可越过墙体投至远处地面，左键投放
   if(G.smokeMode){
     const sm = G.smokeMode;
     if(G.now > sm.until){ cancelSmokeMode(); }
@@ -523,7 +523,7 @@ export function updatePlayer(dt){
       sm.ring.position.copy(pt).y += .06;
       if(G.mouse.lmb){
         G.mouse.lmb = false;
-        spawnSmoke(pt, 4.5, 15);   // 暗幕烟 15s（原版）
+        spawnSmoke(pt, 4.5, 15);   // Omen烟 15s（原版）
         const ent = sm.agent;
         if(sm.key==='e') ent.abCd.e = G.now + sm.cd;
         ent.ab[sm.key].n--;
@@ -538,8 +538,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=28';
-import { raySphere } from './utils.js?v=28';
+import { hitSpheres } from './combat.js?v=29';
+import { raySphere } from './utils.js?v=29';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

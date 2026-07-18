@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=28';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=28';
-import { AGENTS } from './config.js?v=28';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=28';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=28';
-import { inAnyOpen, colQuery } from './map.js?v=28';
-import { sfx } from './audio.js?v=28';
-import { raySphere } from './utils.js?v=28';
+import { G } from './state.js?v=29';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=29';
+import { AGENTS } from './config.js?v=29';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=29';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=29';
+import { inAnyOpen, colQuery } from './map.js?v=29';
+import { sfx } from './audio.js?v=29';
+import { raySphere } from './utils.js?v=29';
 import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
 import { beginControl, endControl, interceptProjectile, registerUtility, tickUtilities } from './abilityRuntime.js';
 import { activateCloveRevive, activateReturnAnchor, applySkyeRegrowth, canClovePostDeathCast, canNeuralTheft, consumeAstraStar, consumeJettDash, consumeReynaSoul, harmonizePair, initAgentState, isDebuffImmune, placeAstraStar, placeRendezvous, placeReturnAnchor, primeJettDash, returnToLightAnchor, selectTejoTarget, setViperEmitter, startNeonSprint, tickAgentState, useNeonSlide, useRendezvous } from './agentMechanics.js';
@@ -163,7 +163,7 @@ function fireWall(ent){
   sfx.molly(0);
 }
 
-// ---------- 震慑（岚切） ----------
+// ---------- 震慑（Breach） ----------
 export function coneDaze(ent, range, dot, dur){
   const look = dirFromYawPitch(ent.yaw, 0);
   for(const e of G.ents){
@@ -182,7 +182,7 @@ export function coneDaze(ent, range, dot, dur){
   sfx.stun(0);
 }
 
-// ---------- 爆炸（雷奕/零式） ----------
+// ---------- 爆炸（Raze/KAY/O） ----------
 export function boomAt(pos, r, dmgNear, dmgFar, owner, name){
   explosionFX(pos);
   sfx.nade(G.player ? pos.distanceTo(G.player.pos) : 0);
@@ -196,7 +196,7 @@ export function boomAt(pos, r, dmgNear, dmgFar, owner, name){
   }
 }
 
-// 雷奕彩弹集束雷：主爆后分裂出子雷弹跳散开二次起爆
+// Raze彩弹集束雷：主爆后分裂出子雷弹跳散开二次起爆
 export function clusterBoom(pos, owner){
   boomAt(pos.clone(), 3.8, 65, 28, owner, '彩弹集束雷');
   const n = 5;
@@ -211,7 +211,7 @@ export function clusterBoom(pos, owner){
   }
 }
 
-// ---------- 压制（零式）：禁用技能 ----------
+// ---------- 压制（KAY/O）：禁用技能 ----------
 export function popSuppress(point, r, dur, owner){
   suppressFX(point);
   targetRing(V3(point.x,0,point.z), r, 900, 0xb478ff);
@@ -497,13 +497,13 @@ export function performAbility(ent, key, slot, def, opts={}){
       throwProj(ent, 'smoke', opts.alt?7:21, opts.alt?2.2:3); sfx.ability(); break;
     case 'smokeSky': {
       if(ent.isPlayer && ent.agent==='brimstone'){
-        // 天穹（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
+        // Brimstone（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
         G.hooks.openSmokeMap?.(ent, key);
         used = false;
         break;
       }
       if(ent.isPlayer && ent.agent==='omen'){
-        // 暗幕（原版幽影式）：进入下烟模式（指针可穿墙瞄点，左键确认时才消耗）
+        // Omen（原版幽影式）：进入下烟模式（指针可穿墙瞄点，左键确认时才消耗）
         G.smokeMode = { agent: ent, key, cd: def.cd||20, until: G.now + 12 };
         G.hooks.hudMsg?.('下烟模式：瞄准落点（可越过墙体）· 左键投放 · 其他键取消');
         used = false;
@@ -629,7 +629,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.reveal();
       break;
     }
-    // ---- 雷奕 ----
+    // ---- Raze ----
     case 'nade':
       throwProj(ent, 'nade', opts.alt?7:24, opts.alt?2.2:3.5); sfx.ability(); break;
     case 'bignade':
@@ -664,7 +664,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       ent.rocketUlt = 1;
       sfx.ultReady();
       break;
-    // ---- 蛛影 ----
+    // ---- Killjoy/Cypher ----
     case 'tripwire': {
       const p = aimPoint(ent, 9);
       spawnTrap(V3(p.x, ent.pos.y, p.z), ent.yaw, ent);
@@ -701,7 +701,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(ent.isPlayer) G.hooks.hudMsg?.(`全域窃视：标记了 ${n} 名敌人`);
       break;
     }
-    // ---- 岚切 ----
+    // ---- Breach ----
     case 'quake': {
       const dir = dirFromYawPitch(ent.yaw, 0);
       const p = V3(ent.pos.x + dir.x*7.5, 0, ent.pos.z + dir.z*7.5);
@@ -729,7 +729,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       coneDaze(ent, 26, .55, 3.2);
       sfx.ultReady();
       break;
-    // ---- 青鸩 ----
+    // ---- Viper ----
     case 'toxicSmoke': {
       const deployed = ent.abilityState.toxicSmoke;
       if(deployed){
@@ -766,7 +766,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.ultReady();
       break;
     }
-    // ---- 零式 ----
+    // ---- KAY/O ----
     case 'suppressNade':
       throwProj(ent, 'suppress', opts.alt?7:22, opts.alt?2.2:3); sfx.ability(); break;
     case 'nanoSwarm':
@@ -786,7 +786,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.ultReady();
       break;
     }
-    // ---- 魅影 ----
+    // ---- Reyna ----
     case 'devour': {
       if(G.now - (ent.lastKillAt||-99) > 6){ used=false; if(ent.isPlayer){ sfx.deny(); G.hooks.hudMsg?.('吞噬：需要在击杀后 6 秒内使用'); } break; }
       ent.healQueue = Math.min(ent.healQueue + 80, Math.max(0, 100 - ent.hp) + 5);
@@ -817,7 +817,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       G.hooks.hudMsg?.(`${ent.name} 进入女皇仪式——击杀即满血！`);
       break;
     }
-    // ---- 灵愈 ----
+    // ---- Skye ----
     case 'seekers': {
       const foes = G.ents.filter(e=>e.alive && e.team!==ent.team)
         .sort((x,y)=>dist2d(x.pos,ent.pos)-dist2d(y.pos,ent.pos)).slice(0,3);
@@ -841,7 +841,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(ent.isPlayer) G.hooks.hudMsg?.(`追猎之灵：锁定了 ${foes.length} 名敌人`);
       break;
     }
-    // ---- 噬梦 ----
+    // ---- Fade ----
     case 'nightfall': {
       revealArea(ent.pos.clone().setY(0), 26, 3.5, ent.team);
       coneDaze(ent, 24, .55, 3.5);
@@ -853,7 +853,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(ent.isPlayer) G.hooks.hudMsg?.('夜幕低语：区域显形 + 大范围震慑减速');
       break;
     }
-    // ---- 伯爵 ----
+    // ---- Chamber ----
     case 'headhunter': {
       ent.weapons.secondary = {
         id:'headhunter',
@@ -884,7 +884,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.ultReady();
       break;
     }
-    // ---- 织锁 ----
+    // ---- Deadlock ----
     case 'cocoon': {
       // 选中半径内最近敌人（无视墙体），束缚禁锢
       const t = G.ents.filter(e=>e.alive && e.team!==ent.team && dist2d(e.pos, ent.pos) < 16)
@@ -1298,7 +1298,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=28').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=29').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, 'hunter-fury');
@@ -1534,7 +1534,7 @@ export function tickHealAndZones(dt){
       if(z.type==='slow') slowed = true;
       else if(z.dps > 0){
         if(z.owner && z.owner.team === e.team){
-          // 火热双手：烈焰站在自己的火圈里持续回血
+          // 火热双手：Phoenix站在自己的火圈里持续回血
           if(z.healOwner && z.owner === e) e.hp = Math.min(100, e.hp + 13*dt);
           continue;
         }

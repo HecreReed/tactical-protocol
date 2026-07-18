@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=28';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=28';
-import { WIDE } from './config.js?v=28';
-import { WORLD } from './mapData.js?v=28';
-import { colQuery } from './map.js?v=28';
+import { G } from './state.js?v=29';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=29';
+import { WIDE } from './config.js?v=29';
+import { WORLD } from './mapData.js?v=29';
+import { colQuery } from './map.js?v=29';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=28';
-import { sfx } from './audio.js?v=28';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=29';
+import { sfx } from './audio.js?v=29';
 import { damageUtility } from './abilityRuntime.js';
 import { consumeIsoShield, handleAgentKill, recordAgentDeath, resolveAgentFatality } from './agentMechanics.js';
 
@@ -107,7 +107,7 @@ export function moveEntity(ent, dt){
   p.z += ent.vel.z * dt; collideAxis(ent,'z',r,h);
   // vertical
   ent.vel.y -= 19 * dt;
-  if(ent.glide && ent.vel.y < -2) ent.vel.y = -2;   // 风影被动：滞空滑翔
+  if(ent.glide && ent.vel.y < -2) ent.vel.y = -2;   // Jett被动：滞空滑翔
   p.y += ent.vel.y * dt;
   const rising = ent.vel.y > 0;
   let floorY = 0;
@@ -238,7 +238,7 @@ export function killEnt(target, killer, weaponName, part){
     killer.ult = Math.min(9, killer.ult + 1);
     handleAgentKill(killer, target, G.now);
     if(killer.knifeUlt > 0) killer.knifeUlt = 5;
-    // 魅影女皇仪式：击杀全额回血并刷新持续时间
+    // Reyna女皇仪式：击杀全额回血并刷新持续时间
     if((killer.empressUntil||0) > G.now){
       killer.healQueue = Math.min(killer.healQueue + 100, 100);
       killer.empressUntil = G.now + 14;
@@ -372,7 +372,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=28';
+import { AGENTS } from './config.js?v=29';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
