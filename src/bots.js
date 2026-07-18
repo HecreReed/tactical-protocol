@@ -6,6 +6,11 @@ import { useAbility, botCast } from './abilities.js?v=29';
 import { removeDrop } from './effects.js?v=29';
 import { sfx } from './audio.js?v=29';
 import { AGENTS } from './config.js?v=29';
+import {
+  assignTeamRole, updateContactMemory, scoreTarget, isReloadSafe,
+  tradeSpacing, shouldGroupForRetake, scoreCover, reserveApproachLane,
+  chooseUtilityIntent,
+} from './botTactics.js?v=29';
 
 const THINK_DT = .12;
 
@@ -22,6 +27,8 @@ export function initBotAI(ent, i){
     flags: {}, abGate: 0,
     aimHead: false, rotated: false,
     routeSeed: i + 1, routeAttempt: 0,
+    teamRole: null, lane: null, contactMemory: null, pendingContact: null,
+    disengageUntil: 0, coverGoal: null,
     state: 'wait',
   };
 }
@@ -37,6 +44,9 @@ export function resetBotRound(ent){
   a.lootDrop = null;
   a.lurkJoinT = 0;
   a.routeAttempt = 0;
+  a.teamRole = assignTeamRole(a.role, sideOf(ent));
+  a.lane = null; a.contactMemory = null; a.pendingContact = null;
+  a.disengageUntil = 0; a.coverGoal = null;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -52,6 +62,45 @@ function tacticalPos(raw, fallbackY=0){
 }
 function waypointFeet(wp){ return V3(wp.x, Math.max(0,wp.y-1.1), wp.z); }
 function waypointDistance(pos, wp){ return navDistance(pos, waypointFeet(wp)); }
+
+function estimatedContact(bot, memory=bot.ai.contactMemory){
+  if(!memory) return null;
+  const key = (bot.id+1)*17 + (memory.sourceId ?? 3)*31 + Math.floor(memory.observedAt*4);
+  const angle = (key % 360) * Math.PI/180;
+  const radius = memory.uncertainty * (.25 + ((key*13)%50)/100);
+  return V3(memory.pos.x+Math.cos(angle)*radius, memory.pos.y, memory.pos.z+Math.sin(angle)*radius);
+}
+
+function nearbyCoverDistance(bot){
+  const feet = V3(bot.pos.x,bot.pos.y+.8,bot.pos.z);
+  let best = Infinity;
+  for(let i=0;i<8;i++){
+    const angle = i*Math.PI/4;
+    best = Math.min(best, rayWalls(feet,V3(Math.cos(angle),0,Math.sin(angle)),6));
+  }
+  return best;
+}
+
+function allyCovering(bot, threat=null){
+  return G.ents.some(e=>e!==bot && e.alive && e.team===bot.team && e.ai &&
+    navDistance(e.pos,bot.pos)<10 && (!threat || e.ai.target===threat));
+}
+
+function chooseCoverGoal(bot, threatPos){
+  if(!threatPos) return null;
+  let best = null, bestScore = -Infinity;
+  for(const wp of G.map.wps){
+    const feet = waypointFeet(wp);
+    const distance = navDistance(bot.pos,feet);
+    if(distance<2 || distance>12 || Math.abs(feet.y-bot.pos.y)>.8) continue;
+    const protectedFromThreat = losBlocked(V3(feet.x,feet.y+1.45,feet.z),V3(threatPos.x,threatPos.y+1.45,threatPos.z));
+    const crowding = G.ents.filter(e=>e!==bot && e.alive && e.team===bot.team && navDistance(e.pos,feet)<1.8).length;
+    const score = scoreCover({distance,threatExposure:protectedFromThreat?0:1,teammateCrowding:crowding,
+      protectsFromThreat:protectedFromThreat,heightDelta:feet.y-bot.pos.y});
+    if(score>bestScore){ bestScore=score; best=feet; }
+  }
+  return best;
+}
 
 // ---------- 武器维护（像人一样管理弹药） ----------
 function totalRangedAmmo(bot){
@@ -75,7 +124,12 @@ function weaponUpkeep(bot){
   if(a.target) return;
   // 空闲时机装填：脱战 1.6s 且弹匣不满
   const w = curWeapon(bot);
-  if(w.def.cat!=='melee' && !w.reloadEnd && w.reserve>0 && w.ammo < w.def.mag*.55 && G.now - bot.lastShotAt > 1.6){
+  const memoryThreat = estimatedContact(bot);
+  const reloadSafe = isReloadSafe({ammo:w.ammo,mag:w.def.mag,visibleEnemies:0,
+    recentDamageAge:G.now-bot.lastDamaged,coverDistance:nearbyCoverDistance(bot),
+    allyCovering:allyCovering(bot),distanceToThreat:memoryThreat?navDistance(bot.pos,memoryThreat):Infinity});
+  if(w.def.cat!=='melee' && !w.reloadEnd && w.reserve>0 && w.ammo < w.def.mag*.55 &&
+     G.now - bot.lastShotAt > 1.6 && reloadSafe){
     w.reloadEnd = G.now + w.def.rl;
   }
   // 有弹药的更强武器优先：切回主武器 / 副武器
@@ -86,9 +140,9 @@ function weaponUpkeep(bot){
 
 // ---------- 感知 ----------
 function findTarget(bot){
-  if(G.now < (bot.flashUntil||0)) return null;
+  if(G.now < (bot.flashUntil||0) || G.now < bot.ai.disengageUntil) return null;
   const eye = eyePos(bot);
-  let best = null, bd = Infinity;
+  let best = null, bestScore = -Infinity;
   for(const e of G.ents){
     if(!e.alive || e.team === bot.team) continue;
     const d = dist2d(bot.pos, e.pos);
@@ -100,10 +154,11 @@ function findTarget(bot){
     if(losBlocked(eye, te)) continue;
     const hspd = Math.hypot(e.vel.x, e.vel.z);
     if(hspd < 2.5 && d > 28 + 12*D() && Math.random() < .5 - .2*D()) continue;
-    // 优先打伤害来源 + 残血敌人
-    let score = d * (.55 + e.hp/220);
-    if(bot.lastDamaged > G.now - 2 && e.lastShotAt > G.now - 1.5) score *= .5;
-    if(score < bd){ bd = score; best = e; }
+    const coverage = G.ents.filter(m=>m!==bot && m.alive && m.team===bot.team && m.ai?.target===e).length;
+    const score = scoreTarget({visible:true,distance:d,health:e.hp,vertical:e.pos.y-bot.pos.y,
+      angularExposure:1-Math.min(1,Math.abs(angDiff(bot.yaw,ty))/fov),spikeAction:e.channel,
+      recentlyDamagedBot:bot.lastDamaged>G.now-2 && e.lastShotAt>G.now-1.5,teammateCoverage:coverage});
+    if(score > bestScore){ bestScore = score; best = e; }
   }
   return best;
 }
@@ -403,9 +458,19 @@ function combatUpdate(bot, dt){
 
   if(w.def.cat!=='melee' && w.ammo<=0 && !w.reloadEnd){
     const sec = bot.weapons.secondary;
+    const reloadSafe = isReloadSafe({ammo:1,mag:w.def.mag,visibleEnemies:1,
+      recentDamageAge:G.now-bot.lastDamaged,coverDistance:nearbyCoverDistance(bot),
+      allyCovering:allyCovering(bot,t),distanceToThreat:d});
     // 敌人近：快速切副武器保命，而不是站着换弹
     if(d < 22 && bot.slot==='primary' && sec && sec.ammo>0){ bot.slot='secondary'; }
-    else if(w.reserve>0){ w.reloadEnd = G.now + w.def.rl; }
+    else if(w.reserve>0 && reloadSafe){ w.reloadEnd = G.now + w.def.rl; }
+    else if(w.reserve>0){
+      const cover = chooseCoverGoal(bot,t.pos);
+      if(cover){
+        a.coverGoal=cover; a.goal=cover; a.state='fallback'; a.disengageUntil=G.now+1.4;
+        a.target=null; setPath(bot,cover,true); return;
+      }
+    }
     else if(bot.slot!=='secondary' && sec && (sec.ammo>0 || sec.reserve>0)){ bot.slot='secondary'; }
     else { bot.slot='knife'; }   // 全空：拔刀拼命
   }
@@ -451,7 +516,7 @@ const FAKE_UTIL = new Set(['flash','shock','molly','nade','bignade','fragNade','
   'paranoia','quake','wallFlash','slowProj','smokeProj','smokeSky','toxicSmoke','cage']);
 
 function genericBotAbilities(bot, context){
-  const { inCombat, hurt, safeTime, executing, enemyChanneling, target, spike } = context;
+  const { inCombat, hurt, safeTime, executing, enemyChanneling, target, spike, tacticalIntent } = context;
   const aim = target?.pos || enemyChanneling?.pos || (executing ? bot.ai.goal : null) || spike?.pos || bot.ai.lastSeenPos;
   for(const key of ['x','e','q','c']){
     const slot=bot.ab[key],ability=slot?.def;
@@ -461,9 +526,9 @@ function genericBotAbilities(bot, context){
     let should=false;
     switch(ability.intent){
       case 'heal': should=hurt&&safeTime;break;
-      case 'escape': should=hurt&&inCombat;break;
-      case 'cover': should=executing||enemyChanneling;break;
-      case 'info': should=executing||(!inCombat&&G.now-bot.ai.lastSeenAt<3);break;
+      case 'escape': should=tacticalIntent==='escape'&&hurt&&inCombat;break;
+      case 'cover': should=tacticalIntent==='cover'||tacticalIntent==='deny';break;
+      case 'info': should=tacticalIntent==='info'||(executing&&bot.ai.teamRole==='info');break;
       case 'setup': should=!inCombat&&(bot.ai.state==='hold'||bot.ai.state==='post'||executing);break;
       case 'weapon': should=inCombat&&!bot.weapons.primary;break;
       case 'ultimate': should=inCombat||executing||!!enemyChanneling;break;
@@ -497,6 +562,10 @@ function botAbilities(bot){
     }
   }
   const executing = a.state==='execute';
+  const tacticalIntent = chooseUtilityIntent({enemyChanneling:!!enemyChanneling,hurt,
+    safeEscape:nearbyCoverDistance(bot)<3,retaking:side==='def'&&sp.state==='planted',
+    contactConfidence:a.contactMemory?.confidence||0,executing,
+    dangerousSightline:executing&&!!a.goal&&!pathClear(eyePos(bot),V3(a.goal.x,a.goal.y+1.4,a.goal.z),.1)});
 
   switch(bot.agent){
     case 'fengying': {
@@ -840,7 +909,7 @@ function botAbilities(bot){
       break;
     }
   }
-  genericBotAbilities(bot,{inCombat,hurt,safeTime,executing,enemyChanneling,target:t,spike:sp});
+  genericBotAbilities(bot,{inCombat,hurt,safeTime,executing,enemyChanneling,target:t,spike:sp,tacticalIntent});
 }
 
 // 购买阶段：在天幕内自由走动/张望（漫步点先做视线检查，修复开局顶墙搓步）
@@ -925,7 +994,7 @@ export function updateBots(dt){
         }
         let arrived = false;
         if(a.path.length) arrived = followPath(bot, dt, true);
-        else if(dist2d(bot.pos, a.hold) > 1.4) moveDirect(bot, a.hold, dt, true);
+        else if(!atNavGoal(bot.pos, a.hold, 1.4)) moveDirect(bot, a.hold, dt, true);
         else arrived = true;
         if(arrived){
           bot.vel.x *= .6; bot.vel.z *= .6;
@@ -983,9 +1052,23 @@ function think(bot){
   const a = bot.ai;
   const m = G.match;
 
+  a.contactMemory = updateContactMemory(a.contactMemory,null,G.now,D());
+  if(a.pendingContact){
+    a.contactMemory = updateContactMemory(a.contactMemory,a.pendingContact,G.now,D());
+    a.pendingContact = null;
+  }
+  if(a.contactMemory){
+    const estimate = estimatedContact(bot,a.contactMemory);
+    a.lastSeenPos.copy(estimate);
+    a.lastSeenAt = a.contactMemory.observedAt;
+  }
+
   const t = findTarget(bot);
   if(t && t !== a.target){
     a.target = t;
+    a.contactMemory = updateContactMemory(a.contactMemory,
+      {kind:'sight',pos:t.pos,sourceId:t.id},G.now,D());
+    a.lastSeenPos.copy(t.pos); a.lastSeenAt=G.now;
     a.acqT = 0;
     const reactMul = 1.85 - D();
     a.reactAt = G.now + rand(.14, .38) * reactMul;
@@ -994,7 +1077,10 @@ function think(bot){
     else {
       const eye = eyePos(bot), te = eyePos(a.target);
       if(losBlocked(eye, te) || dist2d(bot.pos,a.target.pos) > 60){
-        a.lastSeenAt = G.now; a.lastSeenPos.copy(a.target.pos);
+        a.contactMemory = updateContactMemory(a.contactMemory,
+          {kind:'sight',pos:a.target.pos,sourceId:a.target.id},G.now,D());
+        const estimate=estimatedContact(bot,a.contactMemory);
+        a.lastSeenAt = G.now; a.lastSeenPos.copy(estimate);
         a.target = null; a.acqT = 0;
         // 携弹者不追猎（专注进点下包），其他人追击
         if(G.match.spike?.carrier !== bot) a.state = 'hunt';
@@ -1002,9 +1088,12 @@ function think(bot){
     }
   }
   if(!a.target){
-    for(const e of G.ents){
+    if(!dest) for(const e of G.ents){
       if(!e.alive || e.team===bot.team || G.now >= (e.revealedUntil||0)) continue;
-      if(dist2d(bot.pos,e.pos) < 40){ a.lastSeenPos.copy(e.pos); a.lastSeenAt = G.now; break; }
+      if(dist2d(bot.pos,e.pos) < 40){
+        a.contactMemory=updateContactMemory(a.contactMemory,{kind:'sight',pos:e.pos,sourceId:e.id},G.now,D());
+        a.lastSeenPos.copy(e.pos); a.lastSeenAt = G.now; break;
+      }
     }
   }
 
@@ -1048,10 +1137,16 @@ function thinkAttack(bot){
   const stagePos = stagePt ? tacticalPos(stagePt) : plantPos;
   const stg = m.strategy || { pace:'default', coord:'group' };
 
-  // 分配进攻角色（entry / scout / flank / support）
+  // 稳定分工与路线预约：entry/trader 同路补枪，info 走中路，lurker 走侧翼。
   if(!a.assaultRole){
-    const roles = ['entry','entry','scout','flank','support'];
-    a.assaultRole = roles[a.role % roles.length];
+    a.assaultRole = a.teamRole || assignTeamRole(a.role,'atk');
+    const reservations = new Map();
+    for(const mate of G.ents){
+      if(mate===bot || !mate.alive || mate.team!==bot.team || !mate.ai?.lane) continue;
+      reservations.set(mate.ai.lane,(reservations.get(mate.ai.lane)||0)+1);
+    }
+    a.lane = reserveApproachLane({role:a.assaultRole,index:a.role,lanes:['main','mid','flank'],reservations});
+    a.routeSeed = 1 + a.role + (a.lane==='mid'?17:a.lane==='flank'?37:0);
     // 延迟出发时间
     const baseDelay = stg.pace==='rush'?.5: stg.pace==='slow'?2.5:1.2;
     a.planStartAt = G.now + a.role * .15 + baseDelay * gauss();
@@ -1080,7 +1175,7 @@ function thinkAttack(bot){
     a.fellBack = true;
     a.state = 'fallback';
     a.fallbackUntil = G.now + rand(3.5, 5.5);
-    let dest = null, bd = Infinity;
+    let dest = chooseCoverGoal(bot,estimatedContact(bot)), bd = Infinity;
     for(const e of G.ents){
       if(e===bot || !e.alive || e.team!==bot.team) continue;
       const d = dist2d(e.pos, bot.pos);
@@ -1099,8 +1194,8 @@ function thinkAttack(bot){
   a.planSite = site;
 
   // 分工路线
-  const isLurker = a.assaultRole==='flank' && sp.carrier!==bot && G.map.siteKeys.length>1;
-  const isScout  = a.assaultRole==='scout' && !isLurker;
+  const isLurker = a.assaultRole==='lurker' && sp.carrier!==bot && G.map.siteKeys.length>1;
+  const isScout  = a.assaultRole==='info' && !isLurker;
 
   switch(a.state){
     case 'wait': {
@@ -1118,8 +1213,8 @@ function thinkAttack(bot){
         if(fs) dest = tacticalPos(fs);
         a.flags.faking = true;
       } else if(isScout){
-        // scout goes slightly off-axis from main push
-        dest = V3(stagePos.x + rand(-4,4), 0, stagePos.z + rand(-4,4));
+        const sign = a.role%2 ? -1 : 1;
+        dest = tacticalPos(V3(stagePos.x+sign*4,stagePos.y,stagePos.z+sign*2));
       }
       a.goal = dest.clone();
       setPath(bot, a.goal);
@@ -1174,6 +1269,14 @@ function thinkAttack(bot){
       break;
     }
     case 'execute': {
+      if(a.assaultRole==='trader' && sp.carrier!==bot && G.now-m.executeT<9){
+        const entry=G.ents.find(e=>e.alive && e.team===bot.team && e.ai?.assaultRole==='entry');
+        if(entry && tradeSpacing(navDistance(bot.pos,entry.pos))<.6){
+          a.goal=entry.pos.clone();
+          if(needRepath(bot,a.goal)) setPath(bot,a.goal);
+          break;
+        }
+      }
       if(sp.carrier===bot && inSite(bot.pos) && atNavGoal(bot.pos, plantPos, 4)){
         a.state = 'plant';
       } else if(atNavGoal(bot.pos, a.goal, 3)){
@@ -1223,9 +1326,17 @@ function thinkDefend(bot){
   if(sp.state==='planted'){
     const defenders = G.ents.filter(e=>e.alive && sideOf(e)==='def' && !e.isPlayer);
     const d3 = navDistance(bot.pos, sp.pos, 1);
+    const nearby = defenders.filter(e=>e!==bot && navDistance(e.pos,bot.pos)<12).length;
+    const timeLeft = Math.max(0,sp.explodeAt-G.now);
+    if(!shouldGroupForRetake({aliveDefenders:defenders.length,nearbyDefenders:nearby,spikeTimeLeft:timeLeft})){
+      let mate=null,md=Infinity;
+      for(const e of defenders){ if(e===bot)continue; const d=navDistance(bot.pos,e.pos); if(d<md){md=d;mate=e;} }
+      if(mate){ a.state='regroup'; a.goal=mate.pos.clone(); if(needRepath(bot,a.goal))setPath(bot,a.goal); return; }
+    }
     // 只有在安全（无可见敌、近期未受伤）时才拆包
     const safe = !a.target && G.now - bot.lastDamaged > 1.5;
-    if(defenders[0]===bot && d3 < 2.2 && safe){
+    const defuser = defenders.reduce((best,e)=>navDistance(e.pos,sp.pos)<navDistance(best.pos,sp.pos)?e:best,defenders[0]);
+    if(defuser===bot && d3 < 2.2 && safe){
       a.state='defuse'; bot.vel.x=0; bot.vel.z=0;
       return;
     }
@@ -1244,7 +1355,11 @@ function thinkDefend(bot){
     }
   }
 
-  if(m.rotateCall && G.now < m.rotateCall.until && !a.rotated && Math.random() < .3 + .3*D()){
+  const rotationRole = a.teamRole==='rotator' || a.teamRole==='support' || a.teamRole==='info';
+  const memoryConfidence = a.contactMemory?.confidence || 0;
+  const defendersAlive = G.ents.filter(e=>e.alive&&sideOf(e)==='def').length;
+  if(m.rotateCall && G.now < m.rotateCall.until && !a.rotated &&
+     (rotationRole || memoryConfidence>.74 || (m.rotateCall.strength>=1&&defendersAlive<=3))){
     a.rotated = true;
     a.hold = m.rotateCall.pos.clone();
     a.holdLook = null;
@@ -1257,7 +1372,7 @@ function thinkDefend(bot){
     a.repositioned = true;
     const posts = G.map.defPostList;
     if(posts.length > 1){
-      const p = posts[(a.role + 1 + Math.floor(Math.random()*(posts.length-1))) % posts.length];
+      const p = posts[(a.role + 1) % posts.length];
       a.hold = tacticalPos(p);
       a.holdLook = V3(p.look[0],p.look[2] ?? 1.5,p.look[1]);
       a.state='post'; a.goal = a.hold;
@@ -1266,15 +1381,15 @@ function thinkDefend(bot){
   }
 
   // 听声转位：己方情报点离驻点很远时，按难度概率移动过去支援
-  const c = m.contact[bot.team];
-  if(c && G.now - c.t < 3 && a.hold && dist2d(c.pos, a.hold) > 22 && G.now > (a.introtGate||0)){
+  const c = a.contactMemory;
+  const contactEstimate = estimatedContact(bot,c);
+  if(c && contactEstimate && c.confidence>.42 && G.now-c.observedAt<4 && a.hold &&
+     navDistance(contactEstimate,a.hold)>22 && G.now>(a.introtGate||0) && rotationRole){
     a.introtGate = G.now + 12;
-    if(Math.random() < .2 + .4*D()){
-      a.hold = c.pos.clone();
-      a.holdLook = null;
-      a.state='post'; a.goal = a.hold;
-      setPath(bot, a.hold);
-    }
+    a.hold = tacticalPos(contactEstimate);
+    a.holdLook = null;
+    a.state='post'; a.goal = a.hold;
+    setPath(bot, a.hold);
   }
 
   if(!a.hold){
@@ -1379,10 +1494,11 @@ function navUpdate(bot, dt){
   }
   if(arrived && (a.hold || a.state==='stage')){
     // 驻守朝向：优先最近接敌情报，其次预设视角；无情报时缓慢扫描角度（像人巡视）
-    const c = m.contact[bot.team];
-    const fresh = c && G.now - c.t < 4 && dist2d(c.pos, bot.pos) < 32;
+    const c = a.contactMemory;
+    const contactLook = estimatedContact(bot,c);
+    const fresh = c && contactLook && G.now-c.observedAt<4 && c.confidence>.28 && navDistance(contactLook,bot.pos)<32;
     let look = a.holdLook;
-    if(fresh) look = c.pos;
+    if(fresh) look = contactLook;
     if(look){
       const sweep = fresh ? 0 : Math.sin(G.now*.55 + bot.id*2.1)*.3;
       const ty = yawTo(bot.pos, look) + sweep;

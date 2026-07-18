@@ -228,13 +228,18 @@ function onNoise(pos, ent){
   const m = G.match;
   if(!m || !ent) return;
   const other = ent.team === 'ally' ? 'enemy' : 'ally';
+  let heard = false;
   for(const e of G.ents){
     if(e.team !== other || !e.alive) continue;
     if(dist2d(e.pos, pos) < 45){
-      m.contact[other].pos.copy(pos);
-      m.contact[other].t = G.now;
-      break;
+      heard = true;
+      if(e.ai) e.ai.pendingContact = {kind:'sound',pos:pos.clone(),sourceId:ent.id};
     }
+  }
+  if(heard){
+    m.contact[other].pos.copy(pos);
+    m.contact[other].t = G.now;
+    m.contact[other].confidence = .62;
   }
 }
 
@@ -254,16 +259,15 @@ function onDeath(victim, killer){
   if(killer && killer !== victim){
     for(const e of G.ents){
       if(e.team !== victim.team || !e.alive || e.isPlayer || !e.ai) continue;
-      if(dist2d(e.pos, victim.pos) < 28 && Math.random() < .75){
-        e.ai.lastSeenPos.copy(killer.pos);
-        e.ai.lastSeenAt = G.now;
-        if(['push','advance','stage','post','hold'].includes(e.ai.state)) e.ai.state = 'hunt';
+      if(dist2d(e.pos, victim.pos) < 28){
+        e.ai.pendingContact = {kind:'sound',pos:victim.pos.clone(),sourceId:killer.id};
+        if(['push','advance','stage','post','hold'].includes(e.ai.state) && dist2d(e.pos,victim.pos)<18) e.ai.state = 'hunt';
       }
     }
   }
   // defender death broadcast for rotates
   if(sideOf(victim)==='def'){
-    m.rotateCall = { pos: victim.pos.clone(), until: G.now + 6 };
+    m.rotateCall = { pos: victim.pos.clone(), until: G.now + 6, strength:1 };
   }
   if(m.phase==='live' || m.phase==='planted') checkElimination();
 }
