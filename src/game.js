@@ -115,6 +115,7 @@ export function startRound(){
   m.contact.ally.t = -99; m.contact.enemy.t = -99;
   clearRoundFX();
   G.projectiles.length = 0;
+  G.abilityEvents.length = 0;
   if(G.smokeMode?.ring) G.scene.remove(G.smokeMode.ring);
   G.smokeMode = null;
   G.castMode = null;

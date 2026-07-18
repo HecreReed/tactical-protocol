@@ -7,6 +7,7 @@ import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlo
 import { inAnyOpen, colQuery } from './map.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { raySphere } from './utils.js?v=28';
+import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -15,6 +16,8 @@ export function initAbilities(ent){
     ent.ab[k] = { n: a.ab[k].start, def: a.ab[k] };
   }
   ent.abCd = { e: 0 };
+  ent.abilityState = {};
+  ent.resources = {};
 }
 
 export function roundRefill(ent){
@@ -335,11 +338,15 @@ function gateAbility(ent, key){
 }
 
 function finishAbility(ent, key, slot, used){
-  if(used){
-    if(key==='x') ent.ult = 0;
-    else slot.n--;
+  if(key==='x'){
+    if(used) ent.ult = 0;
+    return used;
   }
-  return used;
+  return commitAbility(slot, used);
+}
+
+function schedule(delay, callback, tag){
+  return scheduleAbilityEvent(G.abilityEvents, G.now + delay, callback, tag);
 }
 
 export function useAbility(ent, key){
@@ -436,7 +443,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       // bot / 非玩家：直接瞄点投放
       const p = aimPoint(ent, 60);
       targetRing(p, 4.5, 1200, 0xff4655, ent);
-      setTimeout(()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 1100);
+      schedule(1.1, ()=>{ if(G.match?.phase==='live'||G.match?.phase==='planted') spawnSmoke(p, 4.5, 19); }, 'smoke');
       if(key==='e') ent.abCd.e = G.now + def.cd;
       sfx.ability();
       break;
@@ -604,7 +611,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       const dir = dirFromYawPitch(ent.yaw, 0);
       const p = V3(ent.pos.x + dir.x*7.5, 0, ent.pos.z + dir.z*7.5);
       targetRing(p, 3.2, 650, 0xffa040);
-      setTimeout(()=>{
+      schedule(.65, ()=>{
         const phn = G.match?.phase;
         if(phn!=='live' && phn!=='planted') return;
         explosionFX(V3(p.x, .5, p.z));
@@ -613,7 +620,7 @@ export function performAbility(ent, key, slot, def, opts={}){
           if(!e.alive || e.team===ent.team) continue;
           if(dist2d(e.pos, p) < 3.4 && e.pos.y < 3) applyDamage(e, 60, ent, '震荡爆破', 'b');
         }
-      }, 650);
+      }, 'aftershock');
       sfx.ability();
       break;
     }
@@ -703,7 +710,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(!foes.length){ used=false; if(ent.isPlayer) sfx.deny(); break; }
       for(const f of foes){
         targetRing(V3(f.pos.x,0,f.pos.z), 1.6, 2400, 0x9fe08a);
-        setTimeout(()=>{
+        schedule(2.2, ()=>{
           const phn=G.match?.phase;
           if((phn!=='live'&&phn!=='planted') || !f.alive) return;
           f.revealedUntil = Math.max(f.revealedUntil||0, G.now+4);
@@ -714,7 +721,7 @@ export function performAbility(ent, key, slot, def, opts={}){
             if(b.team !== ent.team || b.isPlayer || !b.alive || !b.ai) continue;
             if(!b.ai.target && dist2d(b.pos, f.pos) < 45){ b.ai.lastSeenPos.copy(f.pos); b.ai.lastSeenAt = G.now; }
           }
-        }, 2200);
+        }, 'seeker');
       }
       sfx.reveal();
       if(ent.isPlayer) G.hooks.hudMsg?.(`追猎之灵：锁定了 ${foes.length} 名敌人`);
@@ -826,11 +833,11 @@ function castOrbital(ent, p){
   targetRing(p, 5.5, 2600);
   const pd = G.player ? p.distanceTo(G.player.pos) : 0;
   sfx.beamCharge(pd);
-  setTimeout(()=>{
+  schedule(2.5, ()=>{
     if(!G.match || G.match.phase==='end' || G.match.phase==='over') return;
     spawnZone('orbital', p, 5.5, 3.2, 260, ent);
     sfx.beamFire(pd);
-  }, 2500);
+  }, 'orbital');
 }
 
 // ============ AI 定点施放接口 ============
@@ -864,17 +871,17 @@ export function botCast(bot, key, point, target){
     case 'smokeSky': case 'smokeProj': {
       const p = V3(point.x, 0, point.z);
       targetRing(p, 4.2, 1200);
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') spawnSmoke(p, 4.2, 16); }, 1100);
+      schedule(1.1, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') spawnSmoke(p, 4.2, 16); }, 'bot-smoke');
       if(key==='e') bot.abCd.e = G.now + (def.cd||20);
       break;
     }
     case 'molly': case 'shock': {
       const p = V3(point.x, 0, point.z);
       targetRing(p, 3.6, 800);
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted'){
+      schedule(.8, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted'){
         spawnZone('molly', p, def.type==='shock'?3.2:4, def.type==='shock'?4:7, def.type==='shock'?70:55, bot);
         sfx.molly(G.player? p.distanceTo(G.player.pos):0);
-      } }, 800);
+      } }, 'bot-damage-zone');
       break;
     }
     case 'slowProj':
@@ -888,15 +895,15 @@ export function botCast(bot, key, point, target){
     }
     case 'flash': {
       const p = V3(point.x, 1.6, point.z);
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popFlash(p, bot); }, 500);
+      schedule(.5, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popFlash(p, bot); }, 'bot-flash');
       break;
     }
     case 'paranoia':
       bot.yaw = yawTo(bot.pos, point);
       coneFlash(bot); break;
     case 'recon':
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(V3(point.x,0,point.z), 14, 2.5, bot.team); }, 800);
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(V3(point.x,0,point.z), 14, 2.5, bot.team); }, 2400);
+      schedule(.8, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(V3(point.x,0,point.z), 14, 2.5, bot.team); }, 'bot-recon');
+      schedule(2.4, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(V3(point.x,0,point.z), 14, 2.5, bot.team); }, 'bot-recon');
       break;
     case 'pulse':
       revealArea(bot.pos.clone(), 22, 2.5, bot.team);
@@ -935,9 +942,9 @@ export function botCast(bot, key, point, target){
       const p = V3(point.x, 0, point.z);
       targetRing(p, 3, 700, 0xffa040, bot);
       const big = def.type==='bignade';
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn!=='live'&&phn!=='planted') return;
+      schedule(.7, ()=>{ const phn=G.match?.phase; if(phn!=='live'&&phn!=='planted') return;
         if(big) clusterBoom(p, bot);
-        else boomAt(p, 3.2, 50, 22, bot, def.name); }, 700);
+        else boomAt(p, 3.2, 50, 22, bot, def.name); }, 'bot-grenade');
       break;
     }
     case 'rocketUlt': {
@@ -960,7 +967,7 @@ export function botCast(bot, key, point, target){
     case 'quake': {
       const p = V3(point.x, 0, point.z);
       targetRing(p, 3.2, 650, 0xffa040);
-      setTimeout(()=>{
+      schedule(.65, ()=>{
         const phn = G.match?.phase;
         if(phn!=='live' && phn!=='planted') return;
         explosionFX(V3(p.x,.5,p.z));
@@ -969,7 +976,7 @@ export function botCast(bot, key, point, target){
           if(!e.alive || e.team===bot.team) continue;
           if(dist2d(e.pos, p) < 3.4 && e.pos.y < 3) applyDamage(e, 60, bot, '震荡爆破', 'b');
         }
-      }, 650);
+      }, 'bot-aftershock');
       break;
     }
     case 'wallFlash':
@@ -1004,7 +1011,7 @@ export function botCast(bot, key, point, target){
     case 'suppressNade': {
       const p = V3(point.x, .8, point.z);
       targetRing(V3(p.x,0,p.z), 5.5, 700, 0xb478ff, bot);
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popSuppress(p, 5.5, 5, bot); }, 700);
+      schedule(.7, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') popSuppress(p, 5.5, 5, bot); }, 'bot-suppress');
       break;
     }
     case 'hunterUlt': {
@@ -1012,14 +1019,14 @@ export function botCast(bot, key, point, target){
       const t = target;
       if(!t || !t.alive){ used=false; break; }
       for(let i=0;i<3;i++){
-        setTimeout(()=>{
+        schedule(i*.6, ()=>{
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
           import('./effects.js?v=28').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
-        }, i*600);
+        }, 'hunter-fury');
       }
       break;
     }
@@ -1092,6 +1099,7 @@ function stepBouncy(p, dt){
 }
 
 export function updateProjectiles(dt){
+  runAbilityEvents(G.abilityEvents, G.now);
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
     if(!p.mesh) attachProjectileVisual(p);
@@ -1160,7 +1168,7 @@ export function updateProjectiles(dt){
         case 'recon': {
           const pt = p.pos.clone().setY(0);
           revealArea(pt, 14, 2.5, p.owner.team);
-          setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(pt, 14, 2.5, p.owner.team); }, 1600);
+          schedule(1.6, ()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted') revealArea(pt, 14, 2.5, p.owner.team); }, 'recon');
           break;
         }
         case 'nade': boomAt(p.pos.clone(), 3.2, 50, 22, p.owner, '爆破雷'); break;
