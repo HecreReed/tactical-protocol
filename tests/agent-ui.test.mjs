@@ -37,6 +37,11 @@ test('fictional agent names are gone from user-visible configuration', async () 
   assert.doesNotMatch(visible.join('\n'),forbidden);
 });
 
+test('the deployed page declares a local favicon', async () => {
+  const index=await source('index.html');
+  assert.match(index,/<link[^>]+rel=["']icon["'][^>]+href=["']\.\/assets\//);
+});
+
 test('browser automation can inspect and deterministically advance the match', async () => {
   const main=await source('src/main.js');
   assert.match(main,/window\.render_game_to_text/);
