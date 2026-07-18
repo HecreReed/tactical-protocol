@@ -24,6 +24,7 @@ async function openRoster(viewport,label){
   assert.equal(await page.locator('#agentSelect').evaluate(el=>el.scrollTop),0,`${label} roster starts at top`);
   await page.evaluate(async()=>{
     const roster=document.querySelector('#agentSelect');
+    document.querySelectorAll('.agentCard img').forEach(img=>{img.loading='eager';});
     for(let y=0;y<roster.scrollHeight;y+=Math.max(240,roster.clientHeight*.7)){
       roster.scrollTop=y;
       await new Promise(resolve=>setTimeout(resolve,30));
