@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { G } from '../src/state.js?v=29';
+import { G } from '../src/state.js?v=30';
 import { V3 } from '../src/utils.js';
 import { initFX, targetRing, updateFX, clearRoundFX } from '../src/effects.js';
 

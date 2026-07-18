@@ -48,7 +48,7 @@ try{
     assert.equal(state.map,id);
     assert.equal(state.mode,'live',`${id} enters live phase`);
     await page.evaluate(async()=>{
-      const {G}=await import('./src/state.js?v=29');
+      const {G}=await import('./src/state.js?v=30');
       for(const ent of G.ents)ent.flashUntil=G.now+20;
     });
 
@@ -100,7 +100,7 @@ try{
     const gameplay=await canvas.screenshot({path:new URL(`gameplay-${id}.png`,output).pathname});
     assertCanvasPixels(gameplay,`${id} gameplay`);
     const overviewData=await page.evaluate(async()=>{
-      const {G}=await import('./src/state.js?v=29');
+      const {G}=await import('./src/state.js?v=30');
       G.camera.position.set(0,48,52);G.camera.lookAt(0,0,0);G.renderer.render(G.scene,G.camera);
       return G.renderer.domElement.toDataURL('image/png').split(',')[1];
     });
@@ -117,7 +117,7 @@ try{
     if(id==='yunque'){
       const cleanup=await page.evaluate(async()=>{
         const [{G},{targetRing},{startRound}]=await Promise.all([
-          import('./src/state.js?v=29'),import('./src/effects.js?v=29'),import('./src/game.js?v=29')]);
+          import('./src/state.js?v=30'),import('./src/effects.js?v=30'),import('./src/game.js?v=30')]);
         targetRing(G.ents[0].pos,3,2600);
         const before=G.transientFX.length;
         startRound();

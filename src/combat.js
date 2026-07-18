@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=29';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=29';
-import { WIDE } from './config.js?v=29';
-import { WORLD } from './mapData.js?v=29';
-import { colQuery } from './map.js?v=29';
+import { G } from './state.js?v=30';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=30';
+import { WIDE } from './config.js?v=30';
+import { WORLD } from './mapData.js?v=30';
+import { colQuery } from './map.js?v=30';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=29';
-import { sfx } from './audio.js?v=29';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=30';
+import { sfx } from './audio.js?v=30';
 import { damageUtility } from './abilityRuntime.js';
 import { consumeIsoShield, handleAgentKill, recordAgentDeath, resolveAgentFatality } from './agentMechanics.js';
 
@@ -372,7 +372,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=29';
+import { AGENTS } from './config.js?v=30';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

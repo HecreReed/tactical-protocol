@@ -105,7 +105,7 @@ try {
   await sova.page.evaluate(()=>window.advanceTime(100));
   state=JSON.parse(await sova.page.evaluate(()=>window.render_game_to_text()));
   assert.equal(state.controlMode?.type,'sova','Owl Drone transfers control');
-  await sova.page.evaluate(async()=>{const {G}=await import('./src/state.js?v=29');G.mouse.rmb=true;window.advanceTime(100);});
+  await sova.page.evaluate(async()=>{const {G}=await import('./src/state.js?v=30');G.mouse.rmb=true;window.advanceTime(100);});
   state=JSON.parse(await sova.page.evaluate(()=>window.render_game_to_text()));
   assert.equal(state.controlMode,null,'Owl Drone returns control on alternate fire');
   assert.deepEqual(sova.errors,[],'Sova console errors');
@@ -114,10 +114,10 @@ try {
   const phoenix=await openRoster({width:1280,height:800},'phoenix');
   state=await enterAgent(phoenix.page,'Phoenix');
   const anchor=state.player.position;
-  await phoenix.page.evaluate(async()=>{const {G}=await import('./src/state.js?v=29');G.player.ult=6;});
+  await phoenix.page.evaluate(async()=>{const {G}=await import('./src/state.js?v=30');G.player.ult=6;});
   await phoenix.page.keyboard.press('x');
   await phoenix.page.evaluate(async()=>{
-    const [{G},{applyDamage}]=await Promise.all([import('./src/state.js?v=29'),import('./src/combat.js?v=29')]);
+    const [{G},{applyDamage}]=await Promise.all([import('./src/state.js?v=30'),import('./src/combat.js?v=30')]);
     G.player.pos.x+=6;
     applyDamage(G.player,999,null,'smoke-test','b');
   });

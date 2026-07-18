@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=29';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=29';
-import { SKINS, AGENTS } from './config.js?v=29';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=29';
-import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=29';
-import { tracer, spawnSmoke } from './effects.js?v=29';
-import { sfx } from './audio.js?v=29';
+import { G, sens } from './state.js?v=30';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=30';
+import { SKINS, AGENTS } from './config.js?v=30';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=30';
+import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=30';
+import { tracer, spawnSmoke } from './effects.js?v=30';
+import { sfx } from './audio.js?v=30';
 import { useNeonSlide } from './agentMechanics.js';
 
 const P = {
@@ -538,8 +538,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=29';
-import { raySphere } from './utils.js?v=29';
+import { hitSpheres } from './combat.js?v=30';
+import { raySphere } from './utils.js?v=30';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=29';
-import { V3 } from './utils.js?v=29';
-import { sfx } from './audio.js?v=29';
+import { G } from './state.js?v=30';
+import { V3 } from './utils.js?v=30';
+import { sfx } from './audio.js?v=30';
 import { registerUtility } from './abilityRuntime.js';
 
 const pools = { tracers:[], flashes:[] };

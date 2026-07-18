@@ -1,16 +1,16 @@
-import { G } from './state.js?v=29';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=29';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=29';
-import { findPath, inSite, nearestWp, pathClear, snapToNav, navDistance, atNavGoal } from './map.js?v=29';
-import { useAbility, botCast } from './abilities.js?v=29';
-import { removeDrop } from './effects.js?v=29';
-import { sfx } from './audio.js?v=29';
-import { AGENTS } from './config.js?v=29';
+import { G } from './state.js?v=30';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=30';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=30';
+import { findPath, inSite, nearestWp, pathClear, snapToNav, navDistance, atNavGoal } from './map.js?v=30';
+import { useAbility, botCast } from './abilities.js?v=30';
+import { removeDrop } from './effects.js?v=30';
+import { sfx } from './audio.js?v=30';
+import { AGENTS } from './config.js?v=30';
 import {
   assignTeamRole, updateContactMemory, scoreTarget, isReloadSafe,
   tradeSpacing, shouldGroupForRetake, scoreCover, reserveApproachLane,
   chooseUtilityIntent,
-} from './botTactics.js?v=29';
+} from './botTactics.js?v=30';
 
 const THINK_DT = .12;
 
