@@ -9,7 +9,7 @@ import { sfx } from './audio.js?v=28';
 import { raySphere } from './utils.js?v=28';
 import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
 import { beginControl, endControl, interceptProjectile, registerUtility, tickUtilities } from './abilityRuntime.js';
-import { activateReturnAnchor, applySkyeRegrowth, canNeuralTheft, consumeJettDash, consumeReynaSoul, initAgentState, placeRendezvous, primeJettDash, setViperEmitter, startNeonSprint, tickAgentState, useNeonSlide, useRendezvous } from './agentMechanics.js';
+import { activateCloveRevive, activateReturnAnchor, applySkyeRegrowth, canClovePostDeathCast, canNeuralTheft, consumeAstraStar, consumeJettDash, consumeReynaSoul, harmonizePair, initAgentState, isDebuffImmune, placeAstraStar, placeRendezvous, placeReturnAnchor, primeJettDash, returnToLightAnchor, selectTejoTarget, setViperEmitter, startNeonSprint, tickAgentState, useNeonSlide, useRendezvous } from './agentMechanics.js';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -66,6 +66,7 @@ export function popFlash(point, owner){
   sfx.flashPop(G.player? point.distanceTo(G.player.pos):0);
   for(const e of G.ents){
     if(!e.alive) continue;
+    if(isDebuffImmune(e,G.now)) continue;
     const eye = eyePos(e);
     const d = eye.distanceTo(point);
     if(d > 30) continue;
@@ -167,6 +168,7 @@ export function coneDaze(ent, range, dot, dur){
   const look = dirFromYawPitch(ent.yaw, 0);
   for(const e of G.ents){
     if(!e.alive || e.team === ent.team) continue;
+    if(isDebuffImmune(e,G.now)) continue;
     const to = V3(e.pos.x-ent.pos.x, 0, e.pos.z-ent.pos.z);
     const d = to.length();
     if(d > range) continue;
@@ -216,6 +218,7 @@ export function popSuppress(point, r, dur, owner){
   sfx.suppress(G.player ? point.distanceTo(G.player.pos) : 0);
   for(const e of G.ents){
     if(!e.alive || (owner && e.team === owner.team)) continue;
+    if(isDebuffImmune(e,G.now)) continue;
     if(dist2d(e.pos, point) > r) continue;
     e.suppressedUntil = Math.max(e.suppressedUntil||0, G.now + dur);
     if(e.isPlayer) G.hooks.hudMsg?.('你被压制了——技能暂时无法使用！');
@@ -225,7 +228,7 @@ export function popSuppress(point, r, dur, owner){
 // ---------- 部署物运行（哨戒炮 / 绊网） ----------
 export function updateDeployables(dt){
   const ph = G.match?.phase;
-  for(const ent of G.ents) tickAgentState(ent, G.now, dt);
+  for(const ent of G.ents){tickAgentState(ent,G.now,dt);if(ent.abilityState.forceDeath){delete ent.abilityState.forceDeath;applyDamage(ent,999,null,'Not Dead Yet','b');}}
   // 哨戒炮塔
   for(let i=G.turrets.length-1;i>=0;i--){
     const t = G.turrets[i];
@@ -324,7 +327,8 @@ export function updateDeployables(dt){
 
 // ============ 主动使用（玩家/AI 自身向技能） ============
 function gateAbility(ent, key){
-  if(!ent.alive || ent.channel) return null;
+  const deadClove = !ent.alive && ent.agent==='clove';
+  if((!ent.alive && !deadClove) || (ent.channel && ent.channel!=='downed')) return null;
   const ph = G.match?.phase;
   if(ph !== 'live' && ph !== 'planted') return null;
   if(G.now < (ent.suppressedUntil||0)){
@@ -334,6 +338,7 @@ function gateAbility(ent, key){
   const slot = ent.ab[key];
   if(!slot) return null;
   const def = slot.def;
+  if(deadClove && key!=='x' && !canClovePostDeathCast(ent,def.type,G.now)) return null;
   const agent = AGENTS[ent.agent];
   if(key==='x'){
     if(ent.ult < agent.ultCost) { if(ent.isPlayer) sfx.deny(); return null; }
@@ -342,7 +347,8 @@ function gateAbility(ent, key){
       ((def.type==='toxicSmoke'||def.type==='toxicWall') && ent.abilityState?.[def.type]) ||
       (def.type==='cypherCage' && ent.abilityState?.cypherCage) ||
       (def.type==='chamberRendezvous' && ent.abilityState?.rendezvous) ||
-      (def.type==='harborCove' && ent.abilityState?.harborCove);
+      (def.type==='harborCove' && ent.abilityState?.harborCove) ||
+      (['vetoCrosscut','waylayRefract','yoruGatecrash'].includes(def.type) && ent.abilityState?.[`${ent.agent}Anchor`]);
     if(slot.n <= 0 && !recast) { if(ent.isPlayer) sfx.deny(); return null; }
     if(key==='e' && G.now < ent.abCd.e) { if(ent.isPlayer) sfx.deny(); return null; }
   }
@@ -385,7 +391,7 @@ export const THROW_PARAMS = {
 };
 
 // ===== 装备式施法（复刻无畏契约：按技能键持在手上，左键释放/右键低抛或取消） =====
-const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade','hotHands','nanoSwarm','droneScan','boomBot']);
+const EQUIP_THROW = new Set(['smokeProj','flash','molly','slowProj','shock','recon','nade','bignade','fragNade','acidPool','suppressNade','hotHands','nanoSwarm','droneScan','boomBot','miksPulse','cloveMeddle','gekkoMosh','tejoDelivery','vetoChokehold','vyseRazorvine','waylaySaturate','yoruBlindside']);
 const EQUIP_AIM = new Set(['wall','firewall','quake','paranoia','wallFlash','stunWave','shadowStep','tripwire','turret','cage','toxicSmoke','toxicWall','alarmBot','stimBeacon']);
 
 export function startCast(ent, key){
@@ -444,7 +450,11 @@ export function steerControlledUnit(owner, dt){
   unit.vel.lerp(forward.multiplyScalar(speed||3), Math.min(1,dt*5));
   if(G.mouse.lmb && G.now>=(unit.nextDart||0)){
     G.mouse.lmb=false; unit.nextDart=G.now+1;
-    revealArea(unit.pos.clone().setY(0), 10, 3, owner.team);
+    const victim=G.ents.filter(e=>e.alive&&e.team!==owner.team&&dist2d(e.pos,unit.pos)<5).sort((a,b)=>dist2d(a.pos,unit.pos)-dist2d(b.pos,unit.pos))[0];
+    if(unit.scoutType==='trailblazer'&&victim){victim.dazeUntil=G.now+3;victim.slowUntil=G.now+3;unit.until=G.now;}
+    else if(unit.scoutType==='thrash'&&victim){victim.suppressedUntil=G.now+6;victim.slowUntil=G.now+6;unit.until=G.now;}
+    else if(unit.scoutType==='prowler'&&victim){victim.flashUntil=G.now+2.5;victim.abilityState.terrorTrailUntil=G.now+6;unit.until=G.now;}
+    else revealArea(unit.pos.clone().setY(0), 10, 3, owner.team);
   }
   if(G.mouse.rmb){ G.mouse.rmb=false; unit.until=G.now; endControl(G); }
   G.camera.position.copy(unit.pos);
@@ -1026,6 +1036,70 @@ export function performAbility(ent, key, slot, def, opts={}){
     case 'chamberTourDeForce': {
       const w={id:'tourdeforce',def:{name:'Tour De Force',cat:'sniper',mag:5,res:0,fi:.9,rl:0,alt:false,pellets:1,dmg:{0:{h:255,b:150,l:120}},spread:{base:.15,mv:2.5,bloom:2},recoil:{perShot:40,cap:220,wander:3,decay:20},ads:{fov:18,spread:.05,mv:.4,recoil:.5,scope:true},vm:{x:.18,y:-.14,z:-.49,sc:.06,rot:[0,0,.02]}},ammo:5,reserve:0,nextFire:0,reloadEnd:0,shots:0,lastShot:0};ent.weapons.primary=w;ent.slot='primary';ent.abilityState.tourDeForce=true;sfx.ultReady();break;
     }
+    // ---- Astra ----
+    case 'astraGravity': case 'astraNova': case 'astraNebula': {
+      let star=ent.resources.placedStars.find(s=>s.active);
+      if(!star) star=placeAstraStar(ent,aimPoint(ent,45));
+      if(!star||!consumeAstraStar(ent,star.id,def.type)){used=false;sfx.deny();break;}
+      const p=V3(star.pos.x,0,star.pos.z);
+      if(def.type==='astraGravity'){spawnZone('slow',p,5,4,0,ent);for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,p)<5)e.abilityState.tether={pos:p,until:G.now+4};}
+      else if(def.type==='astraNova')schedule(.8,()=>{for(const e of G.ents)if(e.team!==ent.team&&e.alive&&dist2d(e.pos,p)<5){e.dazeUntil=G.now+3;e.slowUntil=G.now+3;}},'nova-pulse');
+      else spawnSmoke(p,4.5,14.25);
+      break;
+    }
+    case 'astraDivide': {const dir=dirFromYawPitch(ent.yaw,0),p=V3(ent.pos.x+dir.x*8,0,ent.pos.z+dir.z*8);spawnWall(p,ent.yaw,21);sfx.ultReady();break;}
+    // ---- Clove ----
+    case 'clovePickMeUp':
+      if(G.now>(ent.abilityState.pickMeUpUntil||0)){used=false;sfx.deny();break;}ent.hp=Math.min(100,ent.hp+50);ent.stimUntil=G.now+8;break;
+    case 'cloveMeddle': throwProj(ent,'meddle',22,3);sfx.ability();break;
+    case 'cloveRuse': {const p=aimPoint(ent,45);spawnSmoke(p,4.5,13.5);if(key==='e')ent.abCd.e=G.now+(def.cd||30);break;}
+    case 'cloveRevive':
+      if(ent.alive){used=false;break;}ent.abilityState.cloveReviveUntil=G.now+5;if(!activateCloveRevive(ent,G.now)){used=false;break;}ent.abilityState.cloveProveUntil=G.now+12;sfx.ultReady();break;
+    // ---- Gekko ----
+    case 'gekkoMosh': throwProj(ent,'gekkoMosh',20,3);sfx.ability();break;
+    case 'gekkoWingman': {const unit=spawnControlledScout(ent,'wingman',7,7);unit.onFinish=()=>{ent.resources.globules.wingman={until:G.now+20};};break;}
+    case 'gekkoDizzy': {const unit=spawnControlledScout(ent,'dizzy',5,5);unit.nextPing=G.now+.4;unit.onFinish=()=>{ent.resources.globules.dizzy={until:G.now+20};};break;}
+    case 'gekkoThrash': {const unit=spawnControlledScout(ent,'thrash',8,9);unit.onFinish=()=>{ent.resources.globules.thrash={until:G.now+20};};break;}
+    // ---- Iso ----
+    case 'isoContingency': {const dir=dirFromYawPitch(ent.yaw,0);for(let i=1;i<=7;i++)spawnSmoke(V3(ent.pos.x+dir.x*i*2.2,0,ent.pos.z+dir.z*i*2.2),1.7,5);break;}
+    case 'isoUndercut': {const look=dirFromYawPitch(ent.yaw,0);for(const e of G.ents){if(!e.alive||e.team===ent.team)continue;const to=V3(e.pos.x-ent.pos.x,0,e.pos.z-ent.pos.z),d=to.length();if(d<24&&look.dot(to.normalize())>.75&&!isDebuffImmune(e,G.now))e.abilityState.vulnerableUntil=G.now+5;}break;}
+    case 'isoDoubleTap': ent.abilityState.doubleTapUntil=G.now+12;if(ent.isPlayer)G.hooks.hudMsg?.('Double Tap - secure a kill to gain a shield');break;
+    case 'isoKillContract': {const target=G.ents.filter(e=>e.alive&&e.team!==ent.team).sort((a,b)=>dist2d(a.pos,ent.pos)-dist2d(b.pos,ent.pos))[0];if(!target){used=false;break;}ent.abilityState.duel={target,until:G.now+15};target.abilityState.duel={target:ent,until:G.now+15};target.revealedUntil=G.now+15;sfx.ultReady();break;}
+    // ---- Miks ----
+    case 'miksPulse': {
+      const p=aimPoint(ent,22);if(opts.alt){for(const e of G.ents)if(e.alive&&e.team===ent.team&&dist2d(e.pos,p)<5)e.hp=Math.min(100,e.hp+35);}else for(const e of G.ents)if(e.alive&&e.team!==ent.team&&dist2d(e.pos,p)<5&&!isDebuffImmune(e,G.now)){e.dazeUntil=G.now+3;e.slowUntil=G.now+3;}break;
+    }
+    case 'miksHarmonize': {const hit=traceRay(eyePos(ent),dirFromYawPitch(ent.yaw,ent.pitch),14,ent);harmonizePair(ent,hit.ent?.team===ent.team?hit.ent:ent,G.now);sfx.ability();break;}
+    case 'miksWaveform': {if(ent.isPlayer){G.hooks.openSmokeMap?.(ent,key);used=false;}else{const p=aimPoint(ent,50);spawnSmoke(p,4.5,15);if(key==='e')ent.abCd.e=G.now+(def.cd||30);}break;}
+    case 'miksBassquake': {const look=dirFromYawPitch(ent.yaw,0);for(const e of G.ents){if(!e.alive||e.team===ent.team)continue;const to=V3(e.pos.x-ent.pos.x,0,e.pos.z-ent.pos.z),d=to.length();if(d<28&&look.dot(to.normalize())>.55&&!isDebuffImmune(e,G.now)){e.slowUntil=G.now+5;e.dazeUntil=G.now+2;e.vel.addScaledVector(to,8);}}break;}
+    // ---- Tejo ----
+    case 'tejoDrone': spawnControlledScout(ent,'tejo',8,7);break;
+    case 'tejoDelivery': throwProj(ent,'tejoDelivery',22,3);sfx.ability();break;
+    case 'tejoSalvo': {ent.abilityState.tejoTargets=[];const p=aimPoint(ent,55);selectTejoTarget(ent,p);selectTejoTarget(ent,V3(p.x+4,0,p.z));for(const t of ent.abilityState.tejoTargets)schedule(1.2,()=>boomAt(V3(t.x,0,t.z),4,70,35,ent,'Guided Salvo'),'guided-salvo');break;}
+    case 'tejoArmageddon': {const dir=dirFromYawPitch(ent.yaw,0);for(let i=1;i<=6;i++){const p=V3(ent.pos.x+dir.x*i*5,0,ent.pos.z+dir.z*i*5);schedule(i*.45,()=>castOrbital(ent,p),'armageddon');}break;}
+    // ---- Veto ----
+    case 'vetoCrosscut':
+      if(ent.abilityState.vetoAnchor){if(!returnToLightAnchor(ent,'veto',G.now)){used=false;break;}used=false;sfx.teleport(0);}else{const p=aimPoint(ent,14),old=ent.pos;ent.pos=p;placeReturnAnchor(ent,'veto',G.now+45);ent.pos=old;targetRing(p,1,600,0x55b77a,ent);}break;
+    case 'vetoChokehold': throwProj(ent,'vetoTrap',20,3);sfx.ability();break;
+    case 'vetoInterceptor': {const p=aimPoint(ent,9);registerUtility(G.utilities,{type:'interceptor',team:ent.team,ownerId:ent.id,hp:100,pos:p,radius:8,until:G.now+45,recallable:true});targetRing(p,8,800,0x55b77a,ent);break;}
+    case 'vetoEvolution': ent.abilityState.evolutionUntil=G.now+15;ent.stimUntil=G.now+15;ent.healQueue=100;sfx.ultReady();break;
+    // ---- Vyse ----
+    case 'vyseRazorvine': throwProj(ent,'razorvine',20,3);sfx.ability();break;
+    case 'vyseShear': {const p=aimPoint(ent,10);spawnTrap(p,ent.yaw,ent);break;}
+    case 'vyseArcRose': {const p=aimPoint(ent,18);registerUtility(G.utilities,{type:'arc-rose',team:ent.team,ownerId:ent.id,hp:20,pos:V3(p.x,1.8,p.z),until:G.now+45});schedule(.5,()=>popFlash(V3(p.x,1.8,p.z),ent),'arc-rose');break;}
+    case 'vyseSteelGarden': for(const e of G.ents)if(e.alive&&e.team!==ent.team&&dist2d(e.pos,ent.pos)<28&&!isDebuffImmune(e,G.now))e.abilityState.primaryDisabledUntil=G.now+8;break;
+    // ---- Waylay ----
+    case 'waylaySaturate': throwProj(ent,'saturate',22,3);sfx.ability();break;
+    case 'waylayLightspeed': {const dir=dirFromYawPitch(ent.yaw,0),mv=V3(ent.vel.x,0,ent.vel.z);const dash=mv.lengthSq()>2?mv.normalize():dir;ent.vel.x=dash.x*20;ent.vel.z=dash.z*20;ent.dashUntil=G.now+.35;break;}
+    case 'waylayRefract':
+      if(ent.abilityState.waylayAnchor){if(!returnToLightAnchor(ent,'waylay',G.now)){used=false;break;}ent.resistUntil=G.now+.5;used=false;sfx.teleport(0);}else{placeReturnAnchor(ent,'waylay',G.now+12);if(ent.isPlayer)G.hooks.hudMsg?.('Refract anchor set - press E to return');}break;
+    case 'waylayConvergent': ent.stimUntil=G.now+10;coneDaze(ent,26,.6,3);break;
+    // ---- Yoru ----
+    case 'yoruFakeout': {const unit=spawnControlledScout(ent,'decoy',10,6);endControl(G);unit.vel=dirFromYawPitch(ent.yaw,0).multiplyScalar(6);break;}
+    case 'yoruBlindside': throwProj(ent,'yoruFlash',24,3);sfx.ability();break;
+    case 'yoruGatecrash':
+      if(ent.abilityState.yoruAnchor){if(!returnToLightAnchor(ent,'yoru',G.now)){used=false;break;}used=false;sfx.teleport(0);}else{placeReturnAnchor(ent,'yoru',G.now+30);if(ent.isPlayer)G.hooks.hudMsg?.('Gatecrash tether active - press E to teleport');}break;
+    case 'yoruDrift': ent.resistUntil=G.now+10;ent.abilityState.driftUntil=G.now+10;ent.speedMul=1.25;sfx.ultReady();break;
   }
   return used;
 }
@@ -1267,7 +1341,7 @@ export function sellAbility(ent, key){
 }
 
 // ---------- 投掷物弹跳物理：墙面/箱体反弹 + 落地衰减滚动，静止或超时后生效 ----------
-const BOUNCY = new Set(['smoke','flash','molly','slow','shock','relay','gravnet','nade','bignade','frag','acid','hot','nanoproj','clusterlet']);
+const BOUNCY = new Set(['smoke','flash','molly','slow','shock','relay','gravnet','meddle','gekkoMosh','tejoDelivery','vetoTrap','razorvine','saturate','yoruFlash','nade','bignade','frag','acid','hot','nanoproj','clusterlet']);
 function projBlocked(pos, r){
   const lists = [colQuery(pos.x-r-.5, pos.z-r-.5, pos.x+r+.5, pos.z+r+.5), G.dynColliders];
   for(const list of lists) for(const b of list){
@@ -1311,6 +1385,7 @@ export function updateProjectiles(dt){
     if(p.type==='controlledScout'){
       if(G.now>=p.until || !p.owner.alive){
         if(G.controlMode?.unit===p) endControl(G);
+        p.onFinish?.();
         removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
       }
       const dir=p.vel.clone(); const step=dir.length()*dt;
@@ -1388,6 +1463,18 @@ export function updateProjectiles(dt){
           spawnZone('slow',p.pos.clone().setY(0),4.5,6,0,p.owner);
           for(const e of G.ents) if(e.alive&&e.team!==p.owner.team&&dist2d(e.pos,p.pos)<4.5)e.abilityState.gravnetUntil=G.now+6;
           break;
+        case 'meddle':
+          for(const e of G.ents)if(e.alive&&e.team!==p.owner.team&&dist2d(e.pos,p.pos)<6&&!isDebuffImmune(e,G.now)){e.hp=Math.min(e.hp,90);e.abilityState.decayUntil=G.now+5;}
+          break;
+        case 'gekkoMosh': spawnZone('molly',p.pos.clone().setY(0),5,4,45,p.owner);break;
+        case 'tejoDelivery': boomAt(p.pos.clone(),4,70,25,p.owner,'Special Delivery');break;
+        case 'vetoTrap':
+          registerUtility(G.utilities,{type:'chokehold',team:p.owner.team,ownerId:p.owner.id,hp:50,pos:p.pos.clone().setY(0),radius:4,until:G.now+30});
+          spawnZone('slow',p.pos.clone().setY(0),4,8,0,p.owner);break;
+        case 'razorvine': spawnZone('slow',p.pos.clone().setY(0),4.5,8,18,p.owner);break;
+        case 'saturate':
+          spawnZone('slow',p.pos.clone().setY(0),4.5,5,0,p.owner);for(const e of G.ents)if(e.alive&&e.team!==p.owner.team&&dist2d(e.pos,p.pos)<4.5)e.dazeUntil=G.now+2;break;
+        case 'yoruFlash': popFlash(p.pos.clone().setY(Math.max(1.4,p.pos.y)),p.owner);break;
         case 'recon': {
           const pt = p.pos.clone().setY(0);
           revealArea(pt, 14, 2.5, p.owner.team);

@@ -8,7 +8,7 @@ const LIM = WORLD/2 - .5;
 import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { damageUtility } from './abilityRuntime.js';
-import { handleAgentKill, resolveAgentFatality } from './agentMechanics.js';
+import { consumeIsoShield, handleAgentKill, recordAgentDeath, resolveAgentFatality } from './agentMechanics.js';
 
 let nextId = 1;
 
@@ -186,6 +186,8 @@ export function losBlocked(a, b){
 export function applyDamage(target, dmg, killer, weaponName, part){
   if(!target.alive) return;
   if(killer && killer !== target && killer.team === target.team) return;   // 友伤关闭
+  if(dmg>0&&consumeIsoShield(target)){if(target.isPlayer)G.hooks.hudMsg?.('Double Tap shield blocked the hit');return;}
+  if(G.now<(target.abilityState?.vulnerableUntil||0))dmg*=2;
   if(target.resistUntil > G.now) dmg *= .55;
   const absorb = Math.min(target.armor, dmg * .66);
   const hpBefore = target.hp;
@@ -224,6 +226,7 @@ export function killEnt(target, killer, weaponName, part){
     }
   }
   target.alive = false;
+  recordAgentDeath(target,G.now);
   target.deaths++;
   target.ult = Math.min(9, target.ult + 1);
   target.channel = null;

@@ -57,7 +57,7 @@ export function initPlayerInput(){
     if(e.code==='Tab'){ e.preventDefault(); G.hooks.showBoard?.(true); }
     if(!G.player) return;
     const p = G.player;
-    if(!p.alive) return;
+    if(!p.alive && p.agent!=='clove') return;
     // 天穹战术地图打开时：E/Esc/其他技能键关闭地图
     if(G.hooks.smokeMapKey?.(e.code)) return;
     // 下烟模式中：用左键确认，其他按键取消
