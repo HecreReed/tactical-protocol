@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=26';
-import { V3, dist2d, rand, pick, clamp } from './utils.js?v=26';
-import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=26';
-import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=26';
-import { initAbilities, roundRefill } from './abilities.js?v=26';
-import { initBotAI, resetBotRound } from './bots.js?v=26';
-import { inSite } from './map.js?v=26';
-import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=26';
-import { buildViewModel, switchSlot } from './player.js?v=26';
-import { sfx } from './audio.js?v=26';
+import { G } from './state.js?v=27';
+import { V3, dist2d, rand, pick, clamp } from './utils.js?v=27';
+import { ECONOMY, AGENT_LIST, AGENTS, WIDE, L_ARMOR_COST, L_ARMOR_HP, H_ARMOR_COST, H_ARMOR_HP } from './config.js?v=27';
+import { makeEnt, makeWeapon, buildBody, resetBody, applyDamage } from './combat.js?v=27';
+import { initAbilities, roundRefill } from './abilities.js?v=27';
+import { initBotAI, resetBotRound } from './bots.js?v=27';
+import { inSite } from './map.js?v=27';
+import { clearRoundFX, explosionFX, addMesh, removeMesh, addBarriers, removeBarriers, removeDrop, spawnDrop } from './effects.js?v=27';
+import { buildViewModel, switchSlot } from './player.js?v=27';
+import { sfx } from './audio.js?v=27';
 
 const BOT_NAMES_ALLY = [];
 const BOT_NAMES_ENEMY = [];
@@ -106,6 +106,10 @@ export function startRound(){
   m.rotateCall = null;
   m.plan = { site: pick(G.map.siteKeys), t: G.now };
   m.strategy = { pace: pick(['rush','default','slow']), coord: pick(['split','group']) };
+  // 战术假打（无畏契约式）：先去假点造势拉动防守，再全队转真点执行
+  const fakeable = G.map.siteKeys.filter(k=>k!==m.plan.site);
+  m.strategy.fake = fakeable.length && m.strategy.pace!=='rush' && Math.random() < .38 ? pick(fakeable) : null;
+  m.fakeDone = false; m.fakeEndT = 0;
   m.planSwitchedAt = 0;
   m.executeT = 0; m.execSite = null;
   m.contact.ally.t = -99; m.contact.enemy.t = -99;
@@ -463,6 +467,8 @@ export function updateGame(dt){
       }
       break;
     case 'live':
+      // 佯攻兜底：开局 20 秒后强制结束假打（佯攻组阵亡也能收队转真点）
+      if(m.strategy?.fake && !m.fakeDone && G.now - m.liveStart > 16) m.fakeDone = true;
       // 进攻方久攻不下 → 全队转点
       if(!m.planSwitchedAt && G.now - m.liveStart > 45 && m.spike.state!=='planted'){
         const others = G.map.siteKeys.filter(k=>k!==m.plan.site);

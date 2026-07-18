@@ -1,10 +1,10 @@
-import { G } from './state.js?v=26';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=26';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=26';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=26';
-import { useAbility, botCast } from './abilities.js?v=26';
-import { removeDrop } from './effects.js?v=26';
-import { sfx } from './audio.js?v=26';
+import { G } from './state.js?v=27';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=27';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=27';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=27';
+import { useAbility, botCast } from './abilities.js?v=27';
+import { removeDrop } from './effects.js?v=27';
+import { sfx } from './audio.js?v=27';
 
 const THINK_DT = .12;
 
@@ -33,6 +33,7 @@ export function resetBotRound(ent){
   a.fellBack = false; a.fallbackUntil = 0;
   a.repositioned = false; a.introtGate = 0;
   a.lootDrop = null;
+  a.lurkJoinT = 0;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -382,7 +383,7 @@ function combatUpdate(bot, dt){
     const spd = moveSpeed(bot)*.7;
     bot.vel.x = px*a.strafeDir*spd;
     bot.vel.z = pz*a.strafeDir*spd;
-  } else { bot.vel.x *= .5; bot.vel.z *= .5; }
+  } else { bot.vel.x *= .25; bot.vel.z *= .25; }   // 急停开枪（配合首发精准更狠）
 
   if(w.def.cat!=='melee' && w.ammo<=0 && !w.reloadEnd){
     const sec = bot.weapons.secondary;
@@ -429,6 +430,9 @@ function nearestChokeTo(pos){
   return bd < 30 ? best : null;
 }
 const pushing = a => a.state==='advance' || a.state==='execute';
+// 佯攻可用的造势技能（丢向假点入口制造动静）
+const FAKE_UTIL = new Set(['flash','shock','molly','nade','bignade','fragNade','acidPool','suppressNade',
+  'paranoia','quake','wallFlash','slowProj','smokeProj','smokeSky','toxicSmoke','cage']);
 
 function botAbilities(bot){
   const a = bot.ai, m = G.match, side = sideOf(bot);
@@ -651,10 +655,66 @@ function botAbilities(bot){
       }
       break;
     }
+    case 'yinglie': {
+      // 影猎：到位布防绊网+囚笼封口，追击时放幽灵之眼
+      const settled = a.hold && dist2d(bot.pos, a.hold) < 3 && !inCombat;
+      if(settled && bot.ab.c.n>0 && !a.flags.wire && tryGate(a,'c',3)){
+        a.flags.wire = true;
+        const ch = nearestChokeTo(bot.pos);
+        botCast(bot,'c', ch || V3(bot.pos.x+rand(-3,3),0,bot.pos.z+rand(-3,3)));
+      }
+      if(settled && bot.ab.q.n>0 && !a.flags.cage && tryGate(a,'q',3)){
+        a.flags.cage = true;
+        const ch = nearestChokeTo(bot.pos);
+        if(ch) botCast(bot,'q', ch);
+      }
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8)){
+        bot.yaw = yawTo(bot.pos, a.lastSeenPos);
+        useAbility(bot,'e');
+      }
+      if(side==='def' && sp.state==='planted' && dist2d(bot.pos,sp.pos)<16 && bot.ab.q.n>0 && tryGate(a,'q',10))
+        botCast(bot,'q', sp.pos);
+      if(bot.ult>=7 && (executing || (side==='def' && sp.state==='planted') || a.state==='hunt') && tryGate(a,'x',10))
+        useAbility(bot,'x');
+      break;
+    }
+    case 'meiying': {
+      // 魅影：进点致盲，击杀后吞噬回血，残血遁形拉扯
+      if(side==='atk' && executing && a.goal && dist2d(bot.pos,a.goal)<16 && bot.ab.c.n>0 && !a.flags.para && tryGate(a,'c',4)){
+        a.flags.para = true;
+        botCast(bot,'c', a.goal);
+      }
+      if(inCombat && dist2d(bot.pos,t.pos)<16 && bot.ab.c.n>0 && tryGate(a,'c',8)) botCast(bot,'c', t.pos);
+      if(bot.hp<75 && G.now - (bot.lastKillAt||-99) < 5 && bot.ab.q.n>0 && tryGate(a,'q',2)) useAbility(bot,'q');
+      if(hurt && inCombat && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',6)) useAbility(bot,'e');
+      if(bot.ult>=7 && inCombat && tryGate(a,'x',12)) useAbility(bot,'x');
+      break;
+    }
+    case 'lingyu': {
+      // 灵愈：群疗队友，进点闪光开路，追猎之灵收局
+      if(bot.ab.c.n>0 && !inCombat && safeTime){
+        let tgt = null;
+        for(const e of G.ents) if(e.alive && e.team===bot.team && e.hp<60 && dist2d(e.pos,bot.pos)<12)
+          if(!tgt || e.hp < tgt.hp) tgt = e;
+        if(!tgt && bot.hp < 65) tgt = bot;
+        if(tgt && tryGate(a,'c',6)) botCast(bot,'c', null, tgt);
+      }
+      if(side==='atk' && executing && a.goal && bot.ab.q.n>0 && !a.flags.entryFlash && tryGate(a,'q',4)){
+        a.flags.entryFlash = true;
+        botCast(bot,'q', a.goal);
+      }
+      if(!inCombat && G.now-a.lastSeenAt < 2 && a.state==='hunt' && bot.ab.e.n>0 && G.now>bot.abCd.e && tryGate(a,'e',8)){
+        bot.yaw = yawTo(bot.pos, a.lastSeenPos);
+        useAbility(bot,'e');
+      }
+      if(bot.ult>=8 && (executing || enemyChanneling || (side==='def'&&sp.state==='planted')) && tryGate(a,'x',10))
+        useAbility(bot,'x');
+      break;
+    }
   }
 }
 
-// 购买阶段：在天幕内自由走动/张望
+// 购买阶段：在天幕内自由走动/张望（漫步点先做视线检查，修复开局顶墙搓步）
 function buyWander(bot, dt){
   const a = bot.ai;
   if(!a.anchor) a.anchor = bot.pos.clone();
@@ -664,21 +724,32 @@ function buyWander(bot, dt){
       a.wander = null;
       a.wanderYaw = bot.yaw + rand(-1.6, 1.6);
     } else {
-      a.wander = V3(a.anchor.x + rand(-5,5), 0, a.anchor.z + rand(-3.5,3.5));
+      a.wander = null;
+      for(let tries=0; tries<5; tries++){
+        const c = V3(a.anchor.x + rand(-5,5), 0, a.anchor.z + rand(-3.5,3.5));
+        const d = dist2d(bot.pos, c);
+        if(d < .8) continue;
+        const dir = V3((c.x-bot.pos.x)/d, 0, (c.z-bot.pos.z)/d);
+        if(rayWalls(V3(bot.pos.x, bot.pos.y+.8, bot.pos.z), dir, d) >= d - .25){ a.wander = c; break; }
+      }
+      if(!a.wander) a.wanderYaw = bot.yaw + rand(-1.2, 1.2);
     }
   }
   if(a.wander){
     const d = dist2d(bot.pos, a.wander);
-    if(d < .6){
+    const dirx = (a.wander.x-bot.pos.x)/(d||1), dirz = (a.wander.z-bot.pos.z)/(d||1);
+    const probe = Math.min(d, 1.1);
+    if(rayWalls(V3(bot.pos.x, bot.pos.y+.8, bot.pos.z), V3(dirx,0,dirz), probe+.1) < probe){
+      a.wander = null;                  // 前方被挡：立刻放弃该点站住，不顶墙
+      bot.vel.x *= .5; bot.vel.z *= .5;
+    } else if(d < .6){
       a.wander = null;
       bot.vel.x *= .7; bot.vel.z *= .7;
     } else {
       const ty = yawTo(bot.pos, a.wander);
       bot.yaw += angDiff(bot.yaw, ty) * Math.min(1, dt*6);
       const spd = moveSpeed(bot) * .42;
-      const dx = a.wander.x - bot.pos.x, dzz = a.wander.z - bot.pos.z;
-      const l = Math.hypot(dx,dzz)||1;
-      bot.vel.x = dx/l*spd; bot.vel.z = dzz/l*spd;
+      bot.vel.x = dirx*spd; bot.vel.z = dirz*spd;
     }
   } else {
     bot.vel.x *= .8; bot.vel.z *= .8;
@@ -906,11 +977,17 @@ function thinkAttack(bot){
     case 'wait': {
       a.state = 'advance';
       let dest = stagePos;
+      const faking = stg.fake && !m.fakeDone && !isLurker && sp.carrier!==bot;
       if(isLurker){
         const other = G.map.siteKeys.find(k=>k!==site);
         const os = G.map.stages?.[other];
         if(os) dest = V3(os[0],0,os[1]);
         a.flags.lurk = true;
+      } else if(faking){
+        // 战术假打：先去假点造势（脚步+技能声拉动防守转位）
+        const fs = G.map.stages?.[stg.fake];
+        if(fs) dest = V3(fs[0],0,fs[1]);
+        a.flags.faking = true;
       } else if(isScout){
         // scout goes slightly off-axis from main push
         dest = V3(stagePos.x + rand(-4,4), 0, stagePos.z + rand(-4,4));
@@ -920,12 +997,30 @@ function thinkAttack(bot){
       break;
     }
     case 'advance': {
+      if(a.flags.faking && m.fakeDone){ a.flags.faking = false; a.state = 'wait'; break; }   // 佯攻结束：转真点
       if(dist2d(bot.pos, a.goal) < 4){
         a.state = 'stage'; a.stageAt = G.now;
       } else if(needRepath(bot, a.goal)) setPath(bot, a.goal);
       break;
     }
     case 'stage': {
+      // 佯攻进行中
+      if(stg.fake && !m.fakeDone){
+        if(a.flags.faking){
+          if(!m.fakeEndT) m.fakeEndT = G.now + rand(3.5, 6);
+          // 在假点丢一手技能造势
+          if(!a.flags.fakeUtil && bot.ab.q.n>0 && FAKE_UTIL.has(bot.ab.q.def.type) && tryGate(a,'fakeq',2)){
+            a.flags.fakeUtil = true;
+            const ch = G.map.chokes?.[stg.fake];
+            botCast(bot,'q', ch ? V3(ch[0],0,ch[1]) : a.goal);
+          }
+          if(G.now > m.fakeEndT || G.now - m.liveStart > 16) m.fakeDone = true;
+        } else {
+          a.stageAt = G.now;   // 真点先到者（携弹者等）按兵不动，等佯攻结束再集结计时
+        }
+        break;
+      }
+      if(a.flags.faking){ a.flags.faking = false; a.state = 'wait'; break; }   // 佯攻结束：回真点重新集结
       if(!a.flags.lurk){
         const mates = G.ents.filter(e=>e.alive && sideOf(e)==='atk' && !e.isPlayer && !e.ai?.flags.lurk);
         const near = mates.filter(e=>dist2d(e.pos, stagePos) < 13).length;
@@ -935,6 +1030,11 @@ function thinkAttack(bot){
         }
       }
       if(m.executeT && (m.execSite===site || a.flags.lurk)){
+        // 绕后手延迟切入：主队开打后 2.5-5.5 秒从背后包抄，打防守转点时间差
+        if(a.flags.lurk){
+          if(!a.lurkJoinT) a.lurkJoinT = m.executeT + rand(2.5, 5.5);
+          if(G.now < a.lurkJoinT) break;
+        }
         a.state = 'execute';
         const holds = G.map.atkHolds[site] || [];
         const h = holds[a.role % holds.length];

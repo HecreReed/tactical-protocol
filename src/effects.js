@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=26';
-import { V3 } from './utils.js?v=26';
-import { sfx } from './audio.js?v=26';
+import { G } from './state.js?v=27';
+import { V3 } from './utils.js?v=27';
+import { sfx } from './audio.js?v=27';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -149,7 +149,7 @@ export function spawnTrap(pos, yaw, ent){
 
 // ---- 投掷物可视化：发光弹体 + 拖尾轨迹 ----
 const projColors = { smoke:0xbfc9d8, flash:0xffe9a0, molly:0xff7a30, slow:0x7fd0ff, shock:0x8fd3ff,
-  recon:0x39d0c9, nade:0xff9a3d, bignade:0xff7a30, frag:0x9fb4ff, acid:0x59d97f, suppress:0xb478ff, rocket:0xffd070 };
+  recon:0x39d0c9, nade:0xff9a3d, bignade:0xff7a30, frag:0x9fb4ff, acid:0x59d97f, suppress:0xb478ff, rocket:0xffd070, clusterlet:0xffb060 };
 const TRAIL_N = 16;
 export function attachProjectileVisual(p){
   const col = projColors[p.type] ?? 0xffffff;

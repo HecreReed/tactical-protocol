@@ -193,6 +193,33 @@ export const AGENTS = {
       x:{name:'湮灭脉冲',cost:0,max:1,start:0,cd:0,type:'nullPulse',free:true},
     }
   },
+  yinglie: {
+    name:'影猎', role:'哨卫', emoji:'📡', desc:'情报大师·绊网囚笼监控全场', color:0xd8d0b8,
+    ultCost:7, ab:{
+      c:{name:'诡雷绊网',cost:200,max:2,start:1,cd:0,type:'tripwire'},
+      q:{name:'暗网囚笼',cost:100,max:2,start:1,cd:0,type:'cage'},
+      e:{name:'幽灵之眼',cost:0,max:1,start:1,cd:30,type:'droneScan',free:true},
+      x:{name:'窃梦神偷',cost:0,max:1,start:0,cd:0,type:'revealAll',free:true},
+    }
+  },
+  meiying: {
+    name:'魅影', role:'决斗者', emoji:'💜', desc:'嗜杀女皇·击杀吞噬回血遁形', color:0xc45ad0,
+    ultCost:7, ab:{
+      c:{name:'魅惑之眼',cost:250,max:1,start:1,cd:0,type:'paranoia'},
+      q:{name:'吞噬',cost:200,max:2,start:1,cd:0,type:'devour'},
+      e:{name:'虚空遁形',cost:0,max:1,start:1,cd:26,type:'dismiss',free:true},
+      x:{name:'女皇仪式',cost:0,max:1,start:0,cd:0,type:'empress',free:true},
+    }
+  },
+  lingyu: {
+    name:'灵愈', role:'先锋', emoji:'🦋', desc:'自然向导·群疗闪光追猎开路', color:0x9fe08a,
+    ultCost:8, ab:{
+      c:{name:'再生之种',cost:200,max:1,start:1,cd:22,type:'heal'},
+      q:{name:'引导之光',cost:250,max:2,start:1,cd:0,type:'flash'},
+      e:{name:'开拓猛虎',cost:0,max:1,start:1,cd:30,type:'boomBot',free:true},
+      x:{name:'追猎之灵',cost:0,max:1,start:0,cd:0,type:'seekers',free:true},
+    }
+  },
 };
 
 export const AGENT_LIST = Object.keys(AGENTS);

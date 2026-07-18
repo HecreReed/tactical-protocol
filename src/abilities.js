@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=26';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=26';
-import { AGENTS } from './config.js?v=26';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=26';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=26';
-import { inAnyOpen, colQuery } from './map.js?v=26';
-import { sfx } from './audio.js?v=26';
-import { raySphere } from './utils.js?v=26';
+import { G } from './state.js?v=27';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=27';
+import { AGENTS } from './config.js?v=27';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=27';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=27';
+import { inAnyOpen, colQuery } from './map.js?v=27';
+import { sfx } from './audio.js?v=27';
+import { raySphere } from './utils.js?v=27';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -28,6 +28,7 @@ export function roundRefill(ent){
   ent.rocketUlt = 0;
   ent.flashUntil = 0; ent.revealedUntil = 0; ent.resistUntil = 0;
   ent.suppressedUntil = 0; ent.dazeUntil = 0;
+  ent.empressUntil = 0;
 }
 
 function throwProj(ent, type, speed=16, upBoost=3){
@@ -174,12 +175,28 @@ export function coneDaze(ent, range, dot, dur){
 export function boomAt(pos, r, dmgNear, dmgFar, owner, name){
   explosionFX(pos);
   sfx.nade(G.player ? pos.distanceTo(G.player.pos) : 0);
+  G.hooks.noise?.(pos, owner);   // 爆炸声情报：对方队伍据此判断动向（佯攻可拉动防守）
   for(const e of G.ents){
     if(!e.alive || (owner && e.team === owner.team)) continue;
     const d = dist2d(e.pos, pos);
     if(d > r || Math.abs(e.pos.y - pos.y) > 3.2) continue;
     const dmg = dmgFar + (dmgNear - dmgFar) * clamp(1 - d/r, 0, 1);
     applyDamage(e, Math.round(dmg), owner, name, 'b');
+  }
+}
+
+// 雷奕彩弹集束雷：主爆后分裂出子雷弹跳散开二次起爆
+export function clusterBoom(pos, owner){
+  boomAt(pos.clone(), 3.8, 65, 28, owner, '彩弹集束雷');
+  const n = 5;
+  for(let i=0;i<n;i++){
+    const a = i/n*Math.PI*2 + rand(-.35,.35);
+    G.projectiles.push({
+      type:'clusterlet', owner,
+      pos: V3(pos.x, Math.max(pos.y, .25) + .45, pos.z),
+      vel: V3(Math.cos(a)*rand(3.5,6), rand(4.5,6.5), Math.sin(a)*rand(3.5,6)),
+      born: G.now,
+    });
   }
 }
 
@@ -449,7 +466,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       if(hit.ent && hit.ent.team === ent.team) target = hit.ent;
       if(target.hp >= 100 && target === ent){ used = false; if(ent.isPlayer) sfx.deny(); break; }
       target.healQueue = Math.min(target.healQueue + 60, 100 - target.hp + 5);
-      ent.abCd.e = G.now + def.cd;
+      if(key==='e') ent.abCd.e = G.now + def.cd;
       sfx.heal();
       break;
     }
@@ -563,7 +580,7 @@ export function performAbility(ent, key, slot, def, opts={}){
       const p = aimPoint(ent, 26);
       spawnSmoke(p, 3.4, 8);
       spawnZone('slow', p, 3.4, 8, 0, ent);
-      ent.abCd.e = G.now + (def.cd||30);
+      if(key==='e') ent.abCd.e = G.now + (def.cd||30);
       break;
     }
     case 'revealAll': {
@@ -646,6 +663,58 @@ export function performAbility(ent, key, slot, def, opts={}){
       popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
       ent.stimUntil = G.now + 8;
       sfx.ultReady();
+      break;
+    }
+    // ---- 魅影 ----
+    case 'devour': {
+      if(G.now - (ent.lastKillAt||-99) > 6){ used=false; if(ent.isPlayer){ sfx.deny(); G.hooks.hudMsg?.('吞噬：需要在击杀后 6 秒内使用'); } break; }
+      if(ent.hp >= 100){ used=false; if(ent.isPlayer) sfx.deny(); break; }
+      ent.healQueue = Math.min(ent.healQueue + 80, 100 - ent.hp + 5);
+      sfx.heal();
+      break;
+    }
+    case 'dismiss': {
+      const dd = dirFromYawPitch(ent.yaw, 0);
+      const mvv = V3(ent.vel.x,0,ent.vel.z);
+      const dv = mvv.lengthSq() > 4 ? mvv.normalize() : dd;
+      ent.vel.x = dv.x*18; ent.vel.z = dv.z*18;
+      ent.dashUntil = G.now + .3;
+      ent.resistUntil = Math.max(ent.resistUntil||0, G.now + 1.2);
+      teleportFX(ent.pos.clone());
+      if(key==='e') ent.abCd.e = G.now + (def.cd||26);
+      sfx.dash();
+      break;
+    }
+    case 'empress': {
+      ent.empressUntil = G.now + 14;
+      ent.stimUntil = Math.max(ent.stimUntil||0, G.now + 14);
+      ent.healQueue = Math.min(ent.healQueue + 30, 100 - ent.hp + 5);
+      sfx.ultReady();
+      G.hooks.hudMsg?.(`${ent.name} 进入女皇仪式——击杀即满血！`);
+      break;
+    }
+    // ---- 灵愈 ----
+    case 'seekers': {
+      const foes = G.ents.filter(e=>e.alive && e.team!==ent.team)
+        .sort((x,y)=>dist2d(x.pos,ent.pos)-dist2d(y.pos,ent.pos)).slice(0,3);
+      if(!foes.length){ used=false; if(ent.isPlayer) sfx.deny(); break; }
+      for(const f of foes){
+        targetRing(V3(f.pos.x,0,f.pos.z), 1.6, 2400, 0x9fe08a);
+        setTimeout(()=>{
+          const phn=G.match?.phase;
+          if((phn!=='live'&&phn!=='planted') || !f.alive) return;
+          f.revealedUntil = Math.max(f.revealedUntil||0, G.now+4);
+          f.dazeUntil = Math.max(f.dazeUntil||0, G.now+2.2);
+          f.slowUntil = Math.max(f.slowUntil||0, G.now+2.2);
+          if(f.isPlayer){ G.hooks.dazed?.(1.5); sfx.revealed(); }
+          for(const b of G.ents){
+            if(b.team !== ent.team || b.isPlayer || !b.alive || !b.ai) continue;
+            if(!b.ai.target && dist2d(b.pos, f.pos) < 45){ b.ai.lastSeenPos.copy(f.pos); b.ai.lastSeenAt = G.now; }
+          }
+        }, 2200);
+      }
+      sfx.reveal();
+      if(ent.isPlayer) G.hooks.hudMsg?.(`追猎之灵：锁定了 ${foes.length} 名敌人`);
       break;
     }
     // ---- 复刻原版新技能 ----
@@ -773,7 +842,7 @@ export function botCast(bot, key, point, target){
     case 'heal': {
       const t = target && target.team===bot.team ? target : bot;
       t.healQueue = Math.min(t.healQueue + 60, 100 - t.hp + 5);
-      bot.abCd.e = G.now + def.cd;
+      if(key==='e') bot.abCd.e = G.now + def.cd;
       sfx.heal();
       break;
     }
@@ -785,6 +854,7 @@ export function botCast(bot, key, point, target){
     case 'dash': case 'updraft': case 'shadowStep': case 'phoenixUlt': case 'knifeUlt': case 'rez': case 'firewall':
     case 'blastjump': case 'revealAll': case 'nullPulse': case 'bigStun': case 'stunWave': case 'turret':
     case 'stimBeacon': case 'droneScan': case 'boomBot': case 'lockdown':
+    case 'devour': case 'dismiss': case 'empress': case 'seekers':
       return useAbility(bot, key);
     case 'hotHands': {
       const p = V3(point.x, 0, point.z);
@@ -801,8 +871,9 @@ export function botCast(bot, key, point, target){
       const p = V3(point.x, 0, point.z);
       targetRing(p, 3, 700, 0xffa040, bot);
       const big = def.type==='bignade';
-      setTimeout(()=>{ const phn=G.match?.phase; if(phn==='live'||phn==='planted')
-        boomAt(p, big?4:3.2, big?75:50, big?35:22, bot, def.name); }, 700);
+      setTimeout(()=>{ const phn=G.match?.phase; if(phn!=='live'&&phn!=='planted') return;
+        if(big) clusterBoom(p, bot);
+        else boomAt(p, 3.2, 50, 22, bot, def.name); }, 700);
       break;
     }
     case 'rocketUlt': {
@@ -819,7 +890,7 @@ export function botCast(bot, key, point, target){
       const p = V3(point.x, 0, point.z);
       spawnSmoke(p, 3.4, 8);
       spawnZone('slow', p, 3.4, 8, 0, bot);
-      bot.abCd.e = G.now + (def.cd||30);
+      if(key==='e') bot.abCd.e = G.now + (def.cd||30);
       break;
     }
     case 'quake': {
@@ -881,7 +952,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=26').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=27').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -924,7 +995,7 @@ export function sellAbility(ent, key){
 }
 
 // ---------- 投掷物弹跳物理：墙面/箱体反弹 + 落地衰减滚动，静止或超时后生效 ----------
-const BOUNCY = new Set(['smoke','flash','molly','slow','shock','nade','bignade','frag','acid','hot','nanoproj']);
+const BOUNCY = new Set(['smoke','flash','molly','slow','shock','nade','bignade','frag','acid','hot','nanoproj','clusterlet']);
 function projBlocked(pos, r){
   const lists = [colQuery(pos.x-r-.5, pos.z-r-.5, pos.x+r+.5, pos.z+r+.5), G.dynColliders];
   for(const list of lists) for(const b of list){
@@ -999,6 +1070,8 @@ export function updateProjectiles(dt){
     }
     // 闪光弹空中起爆
     if(p.type==='flash' && !landed && G.now - p.born > .55) landed = true;
+    // 集束子雷：短引信起爆
+    if(p.type==='clusterlet' && !landed && G.now - p.born > 1.05) landed = true;
     // 火箭弹直接命中检测
     if(p.type==='rocket' && !landed){
       for(const e of G.ents){
@@ -1027,7 +1100,8 @@ export function updateProjectiles(dt){
           break;
         }
         case 'nade': boomAt(p.pos.clone(), 3.2, 50, 22, p.owner, '爆破雷'); break;
-        case 'bignade': boomAt(p.pos.clone(), 4.2, 75, 35, p.owner, '轰爆弹'); break;
+        case 'bignade': clusterBoom(p.pos, p.owner); break;
+        case 'clusterlet': boomAt(p.pos.clone(), 2.8, 50, 20, p.owner, '彩弹集束雷'); break;
         case 'frag': boomAt(p.pos.clone(), 3.4, 55, 25, p.owner, '破片雷'); break;
         case 'rocket': boomAt(p.pos.clone(), 5.2, 150, 60, p.owner, '毁灭者火箭'); break;
         case 'acid':

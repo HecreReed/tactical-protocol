@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=26';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=26';
-import { SKINS, AGENTS } from './config.js?v=26';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=26';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=26';
-import { tracer, spawnSmoke } from './effects.js?v=26';
-import { sfx } from './audio.js?v=26';
+import { G, sens } from './state.js?v=27';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=27';
+import { SKINS, AGENTS } from './config.js?v=27';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=27';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=27';
+import { tracer, spawnSmoke } from './effects.js?v=27';
+import { sfx } from './audio.js?v=27';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -527,8 +527,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=26';
-import { raySphere } from './utils.js?v=26';
+import { hitSpheres } from './combat.js?v=27';
+import { raySphere } from './utils.js?v=27';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){

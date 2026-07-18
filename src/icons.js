@@ -61,6 +61,12 @@ const P = {
   suppressNade:'<path d="M12 3.6l8.4 8.4-8.4 8.4-8.4-8.4z" opacity=".8"/><path d="M5.2 5.2l13.6 13.6"/>',
   fragNade:   '<circle cx="12" cy="13.5" r="5.6"/><path d="M12 7.9V5.4h3.4"/><path d="M7 6.2l1.8 1.8M17.6 18.4l1.6 1.6M5 15.5H2.8" opacity=".6"/>',
   nullPulse:  '<circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="8.4" opacity=".4"/><path d="M9.7 9.7l4.6 4.6M14.3 9.7l-4.6 4.6"/>',
+  // 魅影
+  devour:     '<path d="M12 20.5s-7-4.4-7-9.8A4 4 0 0 1 12 8a4 4 0 0 1 7 2.7c0 5.4-7 9.8-7 9.8z"/><path d="M12 8V3M9.8 5.2L12 3l2.2 2.2" opacity=".7"/>',
+  dismiss:    '<circle cx="7" cy="12" r="3.2" opacity=".4"/><circle cx="15.5" cy="12" r="3.2" opacity=".7"/><path d="M10 12h8.5M16 9.5l2.5 2.5-2.5 2.5"/>',
+  empress:    '<path d="M4.5 18.5h15"/><path d="M4.5 18.5L3 8l5 4 4-7 4 7 5-4-1.5 10.5z"/><circle cx="12" cy="13.5" r="1.3" fill="currentColor" stroke="none"/>',
+  // 灵愈
+  seekers:    '<circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 4.5a7.5 7.5 0 0 1 7.5 7.5" opacity=".8"/><path d="M12 19.5A7.5 7.5 0 0 1 4.5 12" opacity=".8"/><path d="M17 15.5l3.5 3.5M7 8.5L3.5 5" opacity=".55"/>',
 };
 
 const FALLBACK = '<circle cx="12" cy="12" r="7"/>';

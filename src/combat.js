@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=26';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=26';
-import { WIDE } from './config.js?v=26';
-import { WORLD } from './mapData.js?v=26';
-import { colQuery } from './map.js?v=26';
+import { G } from './state.js?v=27';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=27';
+import { WIDE } from './config.js?v=27';
+import { WORLD } from './mapData.js?v=27';
+import { colQuery } from './map.js?v=27';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=26';
-import { sfx } from './audio.js?v=26';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=27';
+import { sfx } from './audio.js?v=27';
 
 let nextId = 1;
 
@@ -31,6 +31,7 @@ export function makeEnt({name, team, agent, isPlayer=false}){
     knifeUlt: 0, arrowUlt: 0, rocketUlt: 0,
     flashUntil: 0, revealedUntil: 0, resistUntil: 0,
     suppressedUntil: 0, dazeUntil: 0,
+    empressUntil: 0, lastKillAt: -99,
     mesh: null, tag: null, gunMesh: null,
     ai: null,
     lastDamaged: -99, lastShotAt: -99,
@@ -181,6 +182,7 @@ export function losBlocked(a, b){
 // ---------- damage ----------
 export function applyDamage(target, dmg, killer, weaponName, part){
   if(!target.alive) return;
+  if(killer && killer !== target && killer.team === target.team) return;   // 友伤关闭
   if(target.resistUntil > G.now) dmg *= .55;
   const absorb = Math.min(target.armor, dmg * .66);
   const hpBefore = target.hp;
@@ -224,9 +226,16 @@ export function killEnt(target, killer, weaponName, part){
   target.knifeUlt = 0;
   if(killer && killer !== target){
     killer.kills++;
+    killer.lastKillAt = G.now;
     killer.money = Math.min(9000, killer.money + 200);
     killer.ult = Math.min(9, killer.ult + 1);
     if(killer.knifeUlt > 0) killer.knifeUlt = 5;
+    // 魅影女皇仪式：击杀全额回血并刷新持续时间
+    if((killer.empressUntil||0) > G.now){
+      killer.healQueue = Math.min(killer.healQueue + 100, 100);
+      killer.empressUntil = G.now + 14;
+      killer.stimUntil = Math.max(killer.stimUntil||0, G.now + 14);
+    }
     if(killer.isPlayer){ sfx.kill(); G.hooks.hitmarker?.(part==='h', true); }
   }
   // 掉落武器：主武器优先，其次非初始手枪
@@ -342,7 +351,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=26';
+import { AGENTS } from './config.js?v=27';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();
