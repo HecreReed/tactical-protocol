@@ -1,8 +1,15 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=23";
-import { V3, rayAABB, dist2d } from "./utils.js?v=23";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=23";
-const HALF = WORLD/2;   // 55
+import { G } from "./state.js?v=24";
+import { V3, rayAABB, dist2d } from "./utils.js?v=24";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=24";
+const HALF = WORLD/2;
+// 每图主题：mountain 山地起伏 / city 城市天际 / temple 庙宇屋脊 / harbor 港口集装箱
+const MAP_THEMES = { chongqing:'mountain', liexia:'mountain', xuefeng:'mountain',
+  gumiao:'temple', yiji:'temple', santa:'city', huanjie:'city', rongcheng:'city',
+  sixiang:'temple', tiangang:'harbor' };
+const GROUND_TONE = { chongqing:0xb7a894, liexia:0xb0a898, xuefeng:0xe2e8ee,
+  gumiao:0xcabd9e, yiji:0xbfb8a8, santa:0xc4bfae, huanjie:0x9aa0a8,
+  rongcheng:0xa89890, sixiang:0xb8b0a0, tiangang:0xa8b4bc };
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -822,7 +829,7 @@ function pruneDeadEnds(wps, edges, md, mainSet){
   return {wps:outW, edges:outE};
 }
 
-let wt, ft, ct, mt;
+let wt, ct, mt;
 function wallTexture(tone=0x9aa8ad){
   if(wt)return wt;
   const c=document.createElement('canvas');c.width=256;c.height=256;
@@ -856,34 +863,103 @@ function wallTexture(tone=0x9aa8ad){
   wt=new THREE.CanvasTexture(c);wt.wrapS=wt.wrapT=THREE.RepeatWrapping;wt.colorSpace=THREE.SRGBColorSpace;
   return wt;
 }
-function floorTexture(){
-  if(ft)return ft;
+const fts = {};
+function floorTexture(theme='stone'){
+  if(fts[theme]) return fts[theme];
   const c=document.createElement('canvas');c.width=256;c.height=256;
   const g=c.getContext('2d');
-  g.fillStyle='#a8b0b5';g.fillRect(0,0,256,256);
-  for(let i=0;i<1200;i++){
-    g.fillStyle=`rgba(${Math.random()<.5?70:200},${Math.random()<.5?76:206},${Math.random()<.5?82:210},${.03+Math.random()*.06})`;
-    g.fillRect(Math.random()*256,Math.random()*256,1.5+Math.random()*2.5,1.5+Math.random()*2.5);
+  if(theme==='terrace'){
+    // 山地梯田：弯弯曲曲的等高线曲面感
+    g.fillStyle='#a89a86';g.fillRect(0,0,256,256);
+    for(let i=0;i<900;i++){
+      g.fillStyle=`rgba(${Math.random()<.5?80:200},${Math.random()<.5?70:190},${Math.random()<.5?60:170},${.03+Math.random()*.05})`;
+      g.fillRect(Math.random()*256,Math.random()*256,2,2);
+    }
+    // 多层不规则等高曲线
+    for(let ring=0;ring<9;ring++){
+      const cx=128+Math.sin(ring*2.3)*40, cy=128+Math.cos(ring*1.7)*40;
+      const baseR=22+ring*16;
+      g.beginPath();
+      for(let a=0;a<=Math.PI*2+.01;a+=.22){
+        const rr=baseR+Math.sin(a*3+ring)*8+Math.cos(a*5-ring*2)*5;
+        const x=cx+Math.cos(a)*rr, y=cy+Math.sin(a)*rr;
+        a===0?g.moveTo(x,y):g.lineTo(x,y);
+      }
+      g.closePath();
+      g.strokeStyle=`rgba(70,58,46,${.34-ring*.02})`;g.lineWidth=2.4;g.stroke();
+      g.fillStyle=`rgba(${150+ring*6},${138+ring*5},${118+ring*4},.10)`;g.fill();
+    }
+  } else if(theme==='snow'){
+    g.fillStyle='#dee6ec';g.fillRect(0,0,256,256);
+    for(let i=0;i<26;i++){
+      const x=Math.random()*256,y=Math.random()*256,r=14+Math.random()*36;
+      const gr=g.createRadialGradient(x,y,2,x,y,r);
+      gr.addColorStop(0,'rgba(255,255,255,.5)');gr.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();
+    }
+    g.strokeStyle='rgba(120,140,160,.24)';g.lineWidth=1.6;
+    for(let i=0;i<8;i++){
+      let x=Math.random()*256,y=Math.random()*256;
+      g.beginPath();g.moveTo(x,y);
+      for(let j=0;j<4;j++){x+=(Math.random()-.5)*70;y+=(Math.random()-.5)*70;g.lineTo(x,y);}
+      g.stroke();
+    }
+  } else if(theme==='tile'){
+    g.fillStyle='#c2b598';g.fillRect(0,0,256,256);
+    for(let i=0;i<700;i++){
+      g.fillStyle=`rgba(${Math.random()<.5?90:220},${Math.random()<.5?80:205},${Math.random()<.5?60:180},${.04+Math.random()*.05})`;
+      g.fillRect(Math.random()*256,Math.random()*256,2.5,2.5);
+    }
+    g.strokeStyle='rgba(72,60,44,.5)';g.lineWidth=3;
+    for(let v=0;v<=256;v+=64){g.beginPath();g.moveTo(v,0);g.lineTo(v,256);g.stroke();g.beginPath();g.moveTo(0,v);g.lineTo(256,v);g.stroke();}
+    g.strokeStyle='rgba(72,60,44,.25)';g.lineWidth=1.4;
+    for(let v=32;v<256;v+=64){g.beginPath();g.moveTo(v,0);g.lineTo(v,256);g.stroke();g.beginPath();g.moveTo(0,v);g.lineTo(256,v);g.stroke();}
+  } else if(theme==='asphalt'){
+    g.fillStyle='#75797f';g.fillRect(0,0,256,256);
+    for(let i=0;i<1400;i++){
+      g.fillStyle=`rgba(${Math.random()<.5?40:180},${Math.random()<.5?44:184},${Math.random()<.5?50:190},${.04+Math.random()*.05})`;
+      g.fillRect(Math.random()*256,Math.random()*256,1.6,1.6);
+    }
+    g.strokeStyle='rgba(226,214,150,.55)';g.lineWidth=5;g.setLineDash([26,20]);
+    g.beginPath();g.moveTo(128,0);g.lineTo(128,256);g.stroke();g.setLineDash([]);
+    g.strokeStyle='rgba(36,40,46,.5)';g.lineWidth=1.6;
+    for(let i=0;i<6;i++){
+      let x=Math.random()*256,y=Math.random()*256;
+      g.beginPath();g.moveTo(x,y);
+      for(let j=0;j<5;j++){x+=(Math.random()-.5)*50;y+=(Math.random()-.5)*50;g.lineTo(x,y);}
+      g.stroke();
+    }
+  } else if(theme==='deck'){
+    g.fillStyle='#95a2ac';g.fillRect(0,0,256,256);
+    g.strokeStyle='rgba(40,50,58,.5)';g.lineWidth=3;
+    for(let v=0;v<=256;v+=85){g.beginPath();g.moveTo(v,0);g.lineTo(v,256);g.stroke();}
+    for(let v=0;v<=256;v+=85){g.beginPath();g.moveTo(0,v);g.lineTo(256,v);g.stroke();}
+    g.fillStyle='rgba(52,62,70,.6)';
+    for(let y=12;y<256;y+=28)for(let x=12;x<256;x+=28)g.fillRect(x,y,7,3);
+  } else {
+    g.fillStyle='#a8b0b5';g.fillRect(0,0,256,256);
+    for(let i=0;i<1200;i++){
+      g.fillStyle=`rgba(${Math.random()<.5?70:200},${Math.random()<.5?76:206},${Math.random()<.5?82:210},${.03+Math.random()*.06})`;
+      g.fillRect(Math.random()*256,Math.random()*256,1.5+Math.random()*2.5,1.5+Math.random()*2.5);
+    }
+    g.strokeStyle='rgba(40,48,54,.5)';g.lineWidth=3;
+    g.strokeRect(0,0,256,256);
+    g.beginPath();g.moveTo(128,0);g.lineTo(128,256);g.stroke();
+    g.beginPath();g.moveTo(0,128);g.lineTo(256,128);g.stroke();
+    g.strokeStyle='rgba(50,56,62,.45)';g.lineWidth=1.4;
+    for(let i=0;i<7;i++){
+      let x=Math.random()*256,y=Math.random()*256;
+      g.beginPath();g.moveTo(x,y);
+      for(let j=0;j<5;j++){x+=(Math.random()-.5)*44;y+=(Math.random()-.5)*44;g.lineTo(x,y);}
+      g.stroke();
+    }
+    g.fillStyle='rgba(36,42,48,.8)';g.fillRect(196,196,40,40);
+    g.strokeStyle='rgba(90,100,108,.9)';g.lineWidth=2;
+    for(let i=0;i<5;i++){g.beginPath();g.moveTo(200,200+i*8);g.lineTo(232,200+i*8);g.stroke();}
   }
-  // 大块分缝
-  g.strokeStyle='rgba(40,48,54,.5)';g.lineWidth=3;
-  g.strokeRect(0,0,256,256);
-  g.beginPath();g.moveTo(128,0);g.lineTo(128,256);g.stroke();
-  g.beginPath();g.moveTo(0,128);g.lineTo(256,128);g.stroke();
-  // 裂纹
-  g.strokeStyle='rgba(50,56,62,.45)';g.lineWidth=1.4;
-  for(let i=0;i<7;i++){
-    let x=Math.random()*256,y=Math.random()*256;
-    g.beginPath();g.moveTo(x,y);
-    for(let j=0;j<5;j++){x+=(Math.random()-.5)*44;y+=(Math.random()-.5)*44;g.lineTo(x,y);}
-    g.stroke();
-  }
-  // 排水格栅
-  g.fillStyle='rgba(36,42,48,.8)';g.fillRect(196,196,40,40);
-  g.strokeStyle='rgba(90,100,108,.9)';g.lineWidth=2;
-  for(let i=0;i<5;i++){g.beginPath();g.moveTo(200,200+i*8);g.lineTo(232,200+i*8);g.stroke();}
-  ft=new THREE.CanvasTexture(c);ft.wrapS=ft.wrapT=THREE.RepeatWrapping;ft.colorSpace=THREE.SRGBColorSpace;
-  return ft;
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;
+  fts[theme]=t;
+  return t;
 }
 function crateTexture(){
   if(ct)return ct;
@@ -1080,13 +1156,14 @@ export function buildMap(scene, mapId){
   const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(22,32),new THREE.MeshBasicMaterial({color:md.sky.sun,transparent:true,opacity:.12,fog:false,depthWrite:false}));
   sunGlow.position.copy(sunDisc.position);sunGlow.lookAt(0,0,0);scene.add(sunGlow);
 
-  // 地面
-  const ft0=floorTexture();ft0.repeat.set(24,24);
-  const floor=new THREE.Mesh(new THREE.BoxGeometry(WORLD,1,WORLD),new THREE.MeshStandardMaterial({map:ft0,color:0xbfc8cd,roughness:.92,metalness:.05}));
+  // 地面（每图主题纹理 + 主题地色：山地等高线 / 雪原 / 石板 / 沥青 / 甲板）
+  const FLOOR_THEME = { chongqing:'terrace', liexia:'terrace', xuefeng:'snow', gumiao:'tile', yiji:'stone', santa:'tile', huanjie:'asphalt', rongcheng:'asphalt', sixiang:'tile', tiangang:'deck' };
+  const ft0=floorTexture(FLOOR_THEME[md.id]||'stone');ft0.repeat.set(FLOOR_THEME[md.id]==='terrace'?10:24, FLOOR_THEME[md.id]==='terrace'?10:24);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(WORLD,1,WORLD),new THREE.MeshStandardMaterial({map:ft0,color:GROUND_TONE[md.id]||0xbfc8cd,roughness:.92,metalness:.05}));
   floor.position.y=-.5;floor.receiveShadow=true;scene.add(floor);
 
   // 开放区域着色 + 边界线
-  const tintMat=new THREE.MeshStandardMaterial({color:0x3e4a54,roughness:.94,transparent:true,opacity:.42});
+  const tintMat=new THREE.MeshStandardMaterial({color:new THREE.Color(GROUND_TONE[md.id]||0x3e4a54).offsetHSL(0,0,-.28),roughness:.94,transparent:true,opacity:.4});
   for(const r of open){
     const m=new THREE.Mesh(new THREE.BoxGeometry(r[2]-r[0],.04,r[3]-r[1]),tintMat);m.position.set((r[0]+r[2])/2,.02,(r[1]+r[3])/2);m.receiveShadow=true;scene.add(m);
   }
@@ -1109,8 +1186,109 @@ export function buildMap(scene, mapId){
   const wallGeo=new THREE.BoxGeometry(1,1,1),wallMat=new THREE.MeshStandardMaterial({map:wt0,color:md.wallTone,roughness:.82,metalness:.08});
   const inst=new THREE.InstancedMesh(wallGeo,wallMat,walls.length);
   const M=new THREE.Matrix4(),colBase=new THREE.Color(0xffffff);
-  walls.forEach((b,i)=>{const sx=b.max.x-b.min.x,sy=b.max.y-b.min.y,sz=b.max.z-b.min.z;M.makeScale(sx,sy,sz);M.setPosition((b.min.x+b.max.x)/2,(b.min.y+b.max.y)/2,(b.min.z+b.max.z)/2);inst.setMatrixAt(i,M);inst.setColorAt(i,colBase.clone().offsetHSL(0,0,((i*7)%13)*.005-.025));colliders.push(b);});
+  const theme = MAP_THEMES[md.id] || 'city';
+  const hn=(x,z)=>{const v=Math.sin(x*127.1+z*311.7)*43758.5453;return v-Math.floor(v);};
+  walls.forEach((b,i)=>{
+    const sx=b.max.x-b.min.x,sz=b.max.z-b.min.z;
+    // 视觉墙高起伏（碰撞体保持 4m；山地图起伏更大 → 打破方盒感）
+    const amp = theme==='mountain' ? 2.6 : theme==='city' ? 1.8 : 1.1;
+    const sy = 4 + hn(b.min.x, b.min.z)*amp;
+    M.makeScale(sx,sy,sz);M.setPosition((b.min.x+b.max.x)/2,sy/2,(b.min.z+b.max.z)/2);
+    inst.setMatrixAt(i,M);
+    inst.setColorAt(i,colBase.clone().offsetHSL(0,0,((i*7)%13)*.005-.025));
+    colliders.push(b);
+  });
   inst.castShadow=true;inst.receiveShadow=true;scene.add(inst);
+
+  // ---- 主题墙帽：曲面轮廓打破方盒（实心区顶部装饰，无碰撞） ----
+  {
+    const strips = walls.filter(w=> (w.max.x-w.min.x) >= 3 || (w.max.z-w.min.z) >= 3);
+    const capM = new THREE.Matrix4(), capQ = new THREE.Quaternion(), capS = new THREE.Vector3(), capP = new THREE.Vector3(), capE = new THREE.Euler();
+    const place = (mesh, n, cb)=>{
+      let idx = 0;
+      for(const w of strips){
+        if(idx >= n) break;
+        const r0 = hn(w.min.x*1.7, w.min.z*2.3);
+        if(r0 > .42) continue;
+        const t = hn(w.min.x+9, w.min.z+3);
+        const cx = w.min.x + (w.max.x-w.min.x)*t;
+        const cz = w.min.z + (w.max.z-w.min.z)*hn(w.min.x+5, w.min.z+11);
+        idx = cb(idx, cx, cz, hn(cx, cz));
+      }
+      mesh.count = idx;
+      mesh.instanceMatrix.needsUpdate = true;
+      scene.add(mesh);
+    };
+    if(theme === 'mountain'){
+      // 山岩：不规则岩锥 + 半球岩包——弯弯曲曲的山地轮廓
+      const rockMat = new THREE.MeshStandardMaterial({color:new THREE.Color(md.wallTone).offsetHSL(.01,-.04,-.06), roughness:.96});
+      const cones = new THREE.InstancedMesh(new THREE.ConeGeometry(1,1,6), rockMat, 130);
+      place(cones, 130, (idx,cx,cz,r)=>{
+        for(let k=0;k<2 && idx<130;k++){
+          const rr = 1.6+r*3.4, hh = 2+hn(cx+k,cz)*4.5;
+          capP.set(cx+ (k? (r-.5)*4:0), 3.6+hh/2, cz+(k? (hn(cx,cz+k)-.5)*4:0));
+          capE.set(0, r*6.28, (r-.5)*.22); capQ.setFromEuler(capE);
+          capS.set(rr, hh, rr);
+          capM.compose(capP, capQ, capS); cones.setMatrixAt(idx++, capM);
+        }
+        return idx;
+      });
+      const domes = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 5, 0, Math.PI*2, 0, Math.PI/2), rockMat, 70);
+      place(domes, 70, (idx,cx,cz,r)=>{
+        capP.set(cx, 3.9, cz);
+        capE.set(0, r*6.28, 0); capQ.setFromEuler(capE);
+        capS.set(2+r*3.5, 1.2+r*2, 1.6+r*2.6);
+        capM.compose(capP, capQ, capS); domes.setMatrixAt(idx++, capM);
+        return idx;
+      });
+    } else if(theme === 'city'){
+      // 城市：屋顶空调箱 + 天线杆
+      const acMat = new THREE.MeshStandardMaterial({color:0x8b959d, roughness:.8, metalness:.2});
+      const acs = new THREE.InstancedMesh(new THREE.BoxGeometry(1,.7,1), acMat, 80);
+      place(acs, 80, (idx,cx,cz,r)=>{
+        capP.set(cx, 4.35+r*1.4, cz);
+        capE.set(0, r*3.14, 0); capQ.setFromEuler(capE);
+        capS.set(1.2+r*1.4, 1, 1+r);
+        capM.compose(capP, capQ, capS); acs.setMatrixAt(idx++, capM);
+        return idx;
+      });
+      const antMat = new THREE.MeshStandardMaterial({color:0x39424c, roughness:.5});
+      const ants = new THREE.InstancedMesh(new THREE.CylinderGeometry(.05,.07,1,5), antMat, 46);
+      place(ants, 46, (idx,cx,cz,r)=>{
+        const hh = 2.2+r*2.8;
+        capP.set(cx, 4.3+hh/2+r, cz);
+        capQ.identity(); capS.set(1, hh, 1);
+        capM.compose(capP, capQ, capS); ants.setMatrixAt(idx++, capM);
+        return idx;
+      });
+    } else if(theme === 'temple'){
+      // 庙宇：坡屋脊瓦线
+      const ridgeMat = new THREE.MeshStandardMaterial({color:0x4a4038, roughness:.85});
+      const ridges = new THREE.InstancedMesh(new THREE.CylinderGeometry(.7,.7,1,3), ridgeMat, 90);
+      place(ridges, 90, (idx,cx,cz,r)=>{
+        const len = 3+r*5;
+        capP.set(cx, 4.25+r*1.2, cz);
+        capE.set(0, r>.5?0:Math.PI/2, Math.PI/2); capQ.setFromEuler(capE);
+        capS.set(1.1, len, 1.1);
+        capM.compose(capP, capQ, capS); ridges.setMatrixAt(idx++, capM);
+        return idx;
+      });
+    } else if(theme === 'harbor'){
+      // 港口：彩色集装箱堆
+      const boxMat = new THREE.MeshStandardMaterial({roughness:.75, metalness:.25});
+      const boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2,2.2,5.4), boxMat, 60);
+      const cols = [0xc0554a, 0x3e7ca6, 0x549164, 0xb08e3e];
+      const colObj = new THREE.Color();
+      place(boxes, 60, (idx,cx,cz,r)=>{
+        capP.set(cx, 4+1.1+ (r>.7?2.2:0), cz);
+        capE.set(0, r*3.14, 0); capQ.setFromEuler(capE);
+        capS.set(1,1,1);
+        capM.compose(capP, capQ, capS); boxes.setMatrixAt(idx, capM);
+        boxes.setColorAt(idx, colObj.setHex(cols[Math.floor(r*4)%4]));
+        return idx+1;
+      });
+    }
+  }
 
   // 内墙 + 发光腰线
   const mmExtra = [];

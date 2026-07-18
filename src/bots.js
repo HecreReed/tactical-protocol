@@ -1,10 +1,10 @@
-import { G } from './state.js?v=23';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=23';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=23';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=23';
-import { useAbility, botCast } from './abilities.js?v=23';
-import { removeDrop } from './effects.js?v=23';
-import { sfx } from './audio.js?v=23';
+import { G } from './state.js?v=24';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=24';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=24';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=24';
+import { useAbility, botCast } from './abilities.js?v=24';
+import { removeDrop } from './effects.js?v=24';
+import { sfx } from './audio.js?v=24';
 
 const THINK_DT = .12;
 
@@ -971,6 +971,15 @@ function thinkAttack(bot){
 
   if(sp.state==='carried' && sp.carrier===bot && m.executeT && a.state!=='plant' && inSite(bot.pos)){
     a.state = 'plant';
+    a.goal = plantPos.clone();
+  }
+  // 携弹者兜底：卡在非进攻状态（hold/hunt/fallback/loot/wait 超时）时强制去下包
+  if(sp.state==='carried' && sp.carrier===bot &&
+     (m.executeT || G.now - m.liveStart > 30) &&
+     !['plant','execute','advance','stage','fetch'].includes(a.state)){
+    a.state = 'execute';
+    a.goal = plantPos.clone();
+    setPath(bot, a.goal);
   }
 }
 
@@ -1085,7 +1094,8 @@ function navUpdate(bot, dt){
   const a = bot.ai, m = G.match, sp = m.spike;
 
   // 进度看门狗：像真人一样绝不长时间卡死——无进展就换路，再不行瞬移到最近路点
-  if(a.goal && a.path.length){
+  // 下包/拆包/持续引导中绝不触发（修复：带包 AI 在包点被看门狗反复拉扯导致下不了包）
+  if(a.goal && a.path.length && a.state!=='plant' && a.state!=='defuse' && !bot.channel){
     const gd = dist2d(bot.pos, a.goal);
     if(gd > 2.4){
       if(gd < (a.wdBest ?? Infinity) - .45){ a.wdBest = gd; a.wdAt = G.now; }
@@ -1103,7 +1113,7 @@ function navUpdate(bot, dt){
     } else { a.wdBest = gd; a.wdAt = G.now; a.wdKick = 0; }
   }
 
-  if(a.state==='plant' && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, a.goal||bot.pos) < 4){
+  if(a.state==='plant' && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, a.goal||bot.pos) < 4.5){
     bot.vel.x = 0; bot.vel.z = 0;
     G.hooks.plantTick?.(bot, dt);
     return;
