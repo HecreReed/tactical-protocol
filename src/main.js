@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=24';
-import { buildMap } from './map.js?v=24';
-import { initFX, updateFX, pulseBarriers } from './effects.js?v=24';
-import { initAudio } from './audio.js?v=24';
-import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=24';
-import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=24';
-import { updateBots } from './bots.js?v=24';
-import { startMatch, updateGame } from './game.js?v=24';
-import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=24';
+import { G } from './state.js?v=25';
+import { buildMap } from './map.js?v=25';
+import { initFX, updateFX, pulseBarriers } from './effects.js?v=25';
+import { initAudio } from './audio.js?v=25';
+import { initHUD, showAgentSelect, updateHUD, renderMinimapStatic, showLockHint, setBuyOpen } from './hud.js?v=25';
+import { initPlayerInput, updatePlayer, buildViewModel, updateObserver } from './player.js?v=25';
+import { updateBots } from './bots.js?v=25';
+import { startMatch, updateGame } from './game.js?v=25';
+import { updateProjectiles, tickHealAndZones, updateDeployables } from './abilities.js?v=25';
+import { warmUpFX } from './effects.js?v=25';
 
 let started = false;
 let sun = null;
@@ -153,6 +154,7 @@ function boot(){
     buildMap(G.scene, mapId);
     buildLights(G.map.data);
     renderMinimapStatic();
+    warmUpFX();
     startMatch(agentKey, observer);
     if(!observer) buildViewModel();
     started = true;

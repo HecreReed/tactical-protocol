@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=24';
-import { V3 } from './utils.js?v=24';
-import { sfx } from './audio.js?v=24';
+import { G } from './state.js?v=25';
+import { V3 } from './utils.js?v=25';
+import { sfx } from './audio.js?v=25';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
@@ -416,3 +416,29 @@ export function clearRoundFX(){
 }
 export function removeMesh(m){ if(m) scene.remove(m); }
 export function addMesh(m){ scene.add(m); }
+
+
+// ---------- 着色器预热：把所有运行期特效在屏外生成一次并预编译，消除首次使用卡顿 ----------
+export function warmUpFX(){
+  try {
+    const p = V3(0, -120, 0);
+    spawnSmoke(p, 2, .05);
+    spawnZone('molly', p, 2, .05, 0, null);
+    spawnZone('slow', p, 2, .05, 0, null);
+    spawnZone('toxic', p, 2, .05, 0, null);
+    tracer(p, V3(1,-120,1));
+    impactFX(p); bloodFX(p, V3(0,1,0)); explosionFX(p); teleportFX(p); suppressFX(p);
+    targetRing(V3(0,-119,0), 2, 60);
+    const dummy = { team:'ally', pos:p };
+    const t = spawnTurret(p.clone(), 0, dummy); t.until = G.now + .05; t.hp = 0;
+    for(const ty of ['nano','alarm','beacon','lockdown']){
+      const d = spawnDevice(ty, p.clone(), dummy, { until: G.now + .05, r: 1 });
+    }
+    const proj = { type:'nade', pos:p.clone(), vel:V3(0,0,0) };
+    attachProjectileVisual(proj); updateProjectileVisual(proj, .016);
+    setTimeout(()=> removeProjectileVisual(proj), 80);
+    const drop = spawnDrop({ def:{name:'x',cost:0,cat:'rifle'}, ammo:0, reserve:0, id:'warm' }, p);
+    setTimeout(()=> removeDrop(drop), 80);
+    G.renderer?.compile?.(G.scene, G.camera);
+  } catch(err){ console.warn('warmUpFX', err); }
+}

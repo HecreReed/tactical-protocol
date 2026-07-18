@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=24';
-import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=24';
-import { WIDE } from './config.js?v=24';
-import { WORLD } from './mapData.js?v=24';
-import { colQuery } from './map.js?v=24';
+import { G } from './state.js?v=25';
+import { V3, rayAABB, raySphere, segHitsSphere, clamp, gauss, rand } from './utils.js?v=25';
+import { WIDE } from './config.js?v=25';
+import { WORLD } from './mapData.js?v=25';
+import { colQuery } from './map.js?v=25';
 const LIM = WORLD/2 - .5;
-import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=24';
-import { sfx } from './audio.js?v=24';
+import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=25';
+import { sfx } from './audio.js?v=25';
 
 let nextId = 1;
 
@@ -127,14 +127,18 @@ export function moveEntity(ent, dt){
 }
 
 // ---------- hitboxes ----------
+const _hs = [
+  { part:'h', c:V3(), r:.18 },
+  { part:'b', c:V3(), r:.32 },
+  { part:'l', c:V3(), r:.3 },
+];
 export function hitSpheres(ent){
   const s = ent.crouch ? .78 : 1;
   const y = ent.pos.y;
-  return [
-    { part:'h', c:V3(ent.pos.x, y + 1.64*s + (ent.crouch ? .12 : 0), ent.pos.z), r:.18 },
-    { part:'b', c:V3(ent.pos.x, y + 1.18*s, ent.pos.z), r:.32 },
-    { part:'l', c:V3(ent.pos.x, y + .5*s, ent.pos.z), r:.3 },
-  ];
+  _hs[0].c.set(ent.pos.x, y + 1.64*s + (ent.crouch ? .12 : 0), ent.pos.z);
+  _hs[1].c.set(ent.pos.x, y + 1.18*s, ent.pos.z);
+  _hs[2].c.set(ent.pos.x, y + .5*s, ent.pos.z);
+  return _hs;
 }
 
 export function rayWalls(o, dir, maxD){
@@ -338,7 +342,7 @@ export function meleeAttack(ent, heavy){
 }
 
 // ---------- bot body ----------
-import { AGENTS } from './config.js?v=24';
+import { AGENTS } from './config.js?v=25';
 const teamColors = { ally:{head:0x3fb3ad, trim:0x2f8f8a}, enemy:{head:0xd04555, trim:0xb03040} };
 export function buildBody(ent){
   const g = new THREE.Group();

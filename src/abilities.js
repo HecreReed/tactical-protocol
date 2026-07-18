@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=24';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=24';
-import { AGENTS } from './config.js?v=24';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=24';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=24';
-import { inAnyOpen } from './map.js?v=24';
-import { sfx } from './audio.js?v=24';
-import { raySphere } from './utils.js?v=24';
+import { G } from './state.js?v=25';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=25';
+import { AGENTS } from './config.js?v=25';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=25';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=25';
+import { inAnyOpen } from './map.js?v=25';
+import { sfx } from './audio.js?v=25';
+import { raySphere } from './utils.js?v=25';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -881,7 +881,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=24').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=25').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);

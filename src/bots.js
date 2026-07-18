@@ -1,10 +1,10 @@
-import { G } from './state.js?v=24';
-import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=24';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=24';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=24';
-import { useAbility, botCast } from './abilities.js?v=24';
-import { removeDrop } from './effects.js?v=24';
-import { sfx } from './audio.js?v=24';
+import { G } from './state.js?v=25';
+import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=25';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=25';
+import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=25';
+import { useAbility, botCast } from './abilities.js?v=25';
+import { removeDrop } from './effects.js?v=25';
+import { sfx } from './audio.js?v=25';
 
 const THINK_DT = .12;
 
@@ -96,8 +96,12 @@ function findTarget(bot){
   return best;
 }
 
+let pathBudget = 2;
 function setPath(bot, dest){
   const a = bot.ai;
+  // 每帧寻路预算：防止多个 AI 同帧 A* 造成突发卡顿（下一帧自动重试）
+  if(pathBudget <= 0){ a.repathT = G.now + .15; return; }
+  pathBudget--;
   const raw = findPath(bot.pos, dest, 0.15);  // 轻微随机让路线多样但不乱
   a.path = raw.length ? raw : [];
   if(raw.length){
@@ -703,6 +707,7 @@ function separateBots(){
 export function updateBots(dt){
   const m = G.match;
   if(!m || m.phase==='select' || m.phase==='over') return;
+  pathBudget = 2;
   for(const bot of G.ents){
     if(bot.isPlayer || !bot.alive){ if(!bot.isPlayer) updateBodyPose(bot); continue; }
     const a = bot.ai;

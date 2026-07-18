@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { G } from "./state.js?v=24";
-import { V3, rayAABB, dist2d } from "./utils.js?v=24";
-import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=24";
+import { G } from "./state.js?v=25";
+import { V3, rayAABB, dist2d } from "./utils.js?v=25";
+import { MAPS as NEW_MAPS, WORLD } from "./mapData.js?v=25";
 const HALF = WORLD/2;
 // 每图主题：mountain 山地起伏 / city 城市天际 / temple 庙宇屋脊 / harbor 港口集装箱
 const MAP_THEMES = { chongqing:'mountain', liexia:'mountain', xuefeng:'mountain',
@@ -1514,25 +1514,36 @@ function heappop(h){
   h[i]=last;
   return r;
 }
+// A* 复用缓冲（generation 标记）：消除每次寻路 70KB+ 分配导致的 GC 卡顿
+let _pfG = null, _pfFrom = null, _pfGen = null, _pfGenId = 0, _pfN = 0;
 export function findPath(fromPos, toPos, jitter=0){
   const { wps, edges } = G.map;
   const a = nearestWp(fromPos), b = nearestWp(toPos);
   if(a===b) return [];
   const n = wps.length;
+  if(_pfN < n){
+    _pfN = n;
+    _pfG = new Float64Array(n);
+    _pfFrom = new Int32Array(n);
+    _pfGen = new Int32Array(n);
+  }
+  _pfGenId++;
+  const gen = _pfGenId, g = _pfG, cameFrom = _pfFrom, seen = _pfGen;
   const c2d = (i,j)=>{ const dx=wps[i].x-wps[j].x, dz=wps[i].z-wps[j].z; return Math.hypot(dx,dz); };
   const cost = (i,j)=> c2d(i,j) * (Math.abs(wps[i].y-wps[j].y)>.2?1.35:1);
-  const g = new Float32Array(n).fill(Infinity);
-  const cameFrom = new Int32Array(n).fill(-1);
-  g[a] = 0;
+  seen[a] = gen; g[a] = 0; cameFrom[a] = -1;
   const open = [];
   heappush(open, a, c2d(a,b));
   let found = false;
+  let pops = 0;
   while(open.length){
-    const cur = heappop(open).id ?? heappop(open); // unwrap if stored as object
+    if(++pops > 9000) break;   // 防御性上限
+    const cur = heappop(open).id;
     if(cur === b){ found = true; break; }
     for(const nx of edges[cur]){
       const tg = g[cur] + cost(cur, nx);
-      if(tg < g[nx]){
+      if(seen[nx] !== gen || tg < g[nx]){
+        seen[nx] = gen;
         g[nx] = tg; cameFrom[nx] = cur;
         heappush(open, nx, tg + c2d(nx, b) * (jitter>0?(.85+Math.random()*jitter):1));
       }
@@ -1540,5 +1551,5 @@ export function findPath(fromPos, toPos, jitter=0){
   }
   if(!found) return [];
   const raw=[]; let c=b; while(c!==a){ raw.push(c); c=cameFrom[c]; } raw.push(a); raw.reverse();
-  return raw.map(i=> wps[i].clone ? wps[i].clone() : V3(wps[i].x,wps[i].y,wps[i].z));
+  return raw.map(i=> V3(wps[i].x, wps[i].y, wps[i].z));
 }
