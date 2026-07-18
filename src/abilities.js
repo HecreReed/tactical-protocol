@@ -8,7 +8,8 @@ import { inAnyOpen, colQuery } from './map.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { raySphere } from './utils.js?v=28';
 import { commitAbility, runAbilityEvents, scheduleAbilityEvent } from './abilityCore.js';
-import { interceptProjectile, tickUtilities } from './abilityRuntime.js';
+import { beginControl, endControl, interceptProjectile, tickUtilities } from './abilityRuntime.js';
+import { activateReturnAnchor, consumeJettDash, initAgentState, primeJettDash, setViperEmitter, tickAgentState } from './agentMechanics.js';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -19,6 +20,7 @@ export function initAbilities(ent){
   ent.abCd = { e: 0 };
   ent.abilityState = {};
   ent.resources = {};
+  initAgentState(ent);
 }
 
 export function roundRefill(ent){
@@ -33,6 +35,9 @@ export function roundRefill(ent){
   ent.flashUntil = 0; ent.revealedUntil = 0; ent.resistUntil = 0;
   ent.suppressedUntil = 0; ent.dazeUntil = 0;
   ent.empressUntil = 0;
+  ent.abilityState = {};
+  ent.resources = {};
+  initAgentState(ent);
 }
 
 function throwProj(ent, type, speed=16, upBoost=3){
@@ -220,6 +225,7 @@ export function popSuppress(point, r, dur, owner){
 // ---------- 部署物运行（哨戒炮 / 绊网） ----------
 export function updateDeployables(dt){
   const ph = G.match?.phase;
+  for(const ent of G.ents) tickAgentState(ent, G.now, dt);
   // 哨戒炮塔
   for(let i=G.turrets.length-1;i>=0;i--){
     const t = G.turrets[i];
@@ -332,7 +338,9 @@ function gateAbility(ent, key){
   if(key==='x'){
     if(ent.ult < agent.ultCost) { if(ent.isPlayer) sfx.deny(); return null; }
   } else {
-    if(slot.n <= 0) { if(ent.isPlayer) sfx.deny(); return null; }
+    const recast = (def.type==='razeBlastPack' && ent.abilityState?.blastPack) ||
+      ((def.type==='toxicSmoke'||def.type==='toxicWall') && ent.abilityState?.[def.type]);
+    if(slot.n <= 0 && !recast) { if(ent.isPlayer) sfx.deny(); return null; }
     if(key==='e' && G.now < ent.abCd.e) { if(ent.isPlayer) sfx.deny(); return null; }
   }
   return { slot, def };
@@ -409,6 +417,28 @@ export function cancelCast(){
   G.hooks.rebuildViewModel?.();
 }
 
+export function steerControlledUnit(owner, dt){
+  const cm = G.controlMode;
+  if(!cm || cm.owner!==owner) return false;
+  const unit = cm.unit;
+  if(!owner.alive || G.now>=cm.until || !G.projectiles.includes(unit)){
+    endControl(G); return false;
+  }
+  const forward = dirFromYawPitch(owner.yaw, owner.pitch*.6);
+  let speed = 0;
+  if(G.keys['KeyW']) speed += 8;
+  if(G.keys['KeyS']) speed -= 5;
+  unit.vel.lerp(forward.multiplyScalar(speed||3), Math.min(1,dt*5));
+  if(G.mouse.lmb && G.now>=(unit.nextDart||0)){
+    G.mouse.lmb=false; unit.nextDart=G.now+1;
+    revealArea(unit.pos.clone().setY(0), 10, 3, owner.team);
+  }
+  if(G.mouse.rmb){ G.mouse.rmb=false; unit.until=G.now; endControl(G); }
+  G.camera.position.copy(unit.pos);
+  G.camera.rotation.set(owner.pitch, owner.yaw, 0, 'YXZ');
+  return true;
+}
+
 // 实际执行技能效果（opts.alt = 低抛变体）
 export function performAbility(ent, key, slot, def, opts={}){
   let used = true;
@@ -423,18 +453,33 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.dash();
       break;
     }
+    case 'jettTailwind': {
+      if(!ent.abilityState.jettDash){
+        primeJettDash(ent, G.now);
+        used = false;
+        if(ent.isPlayer) G.hooks.hudMsg?.('Tailwind ready - press E again to dash');
+        break;
+      }
+      if(!consumeJettDash(ent, G.now)){ used=false; break; }
+      const dir = dirFromYawPitch(ent.yaw, 0);
+      const mv = V3(ent.vel.x,0,ent.vel.z);
+      const dash = mv.lengthSq()>4 ? mv.normalize() : dir;
+      ent.vel.x = dash.x*18; ent.vel.z = dash.z*18; ent.dashUntil=G.now+.28;
+      sfx.dash();
+      break;
+    }
     case 'updraft':
       ent.vel.y = 11; ent.grounded = false; sfx.dash(); break;
     case 'smokeProj':
       throwProj(ent, 'smoke', opts.alt?7:21, opts.alt?2.2:3); sfx.ability(); break;
     case 'smokeSky': {
-      if(ent.isPlayer && ent.agent==='tianqiong'){
+      if(ent.isPlayer && ent.agent==='brimstone'){
         // 天穹（原版炼狱式）：打开战术地图，点击地图选点投放，投放时才消耗
         G.hooks.openSmokeMap?.(ent, key);
         used = false;
         break;
       }
-      if(ent.isPlayer && ent.agent==='anmu'){
+      if(ent.isPlayer && ent.agent==='omen'){
         // 暗幕（原版幽影式）：进入下烟模式（指针可穿墙瞄点，左键确认时才消耗）
         G.smokeMode = { agent: ent, key, cd: def.cd||20, until: G.now + 12 };
         G.hooks.hudMsg?.('下烟模式：瞄准落点（可越过墙体）· 左键投放 · 其他键取消');
@@ -524,6 +569,11 @@ export function performAbility(ent, key, slot, def, opts={}){
       sfx.ultReady();
       G.hooks.hudMsg?.(`${ent.name} 涅槃重生！`);
       break;
+    case 'phoenixRunItBack':
+      activateReturnAnchor(ent, G.now+10);
+      sfx.ultReady();
+      if(ent.isPlayer) G.hooks.hudMsg?.('Run it Back - death or timeout returns you to the anchor');
+      break;
     case 'paranoia':
       coneFlash(ent); break;
     case 'shadowStep':
@@ -551,6 +601,15 @@ export function performAbility(ent, key, slot, def, opts={}){
       ent.arrowUlt = 3;
       sfx.ultReady();
       break;
+    case 'sovaDrone': {
+      const dir = dirFromYawPitch(ent.yaw, ent.pitch*.25);
+      const unit = { type:'controlledScout', scoutType:'sova', owner:ent, team:ent.team,
+        pos:eyePos(ent).clone().addScaledVector(dir,.9), vel:dir.clone().multiplyScalar(7), born:G.now, until:G.now+8, nextPing:G.now+.5 };
+      G.projectiles.push(unit);
+      beginControl(G, ent, unit, unit.until);
+      sfx.reveal();
+      break;
+    }
     // ---- 雷奕 ----
     case 'nade':
       throwProj(ent, 'nade', opts.alt?7:24, opts.alt?2.2:3.5); sfx.ability(); break;
@@ -564,6 +623,22 @@ export function performAbility(ent, key, slot, def, opts={}){
       ent.abCd.e = G.now + (def.cd||25);
       boomAt(V3(ent.pos.x, ent.pos.y, ent.pos.z), 2, 0, 0, null, '爆炸跳跃');
       sfx.dash();
+      break;
+    }
+    case 'razeBlastPack': {
+      const planted = ent.abilityState.blastPack;
+      if(planted){
+        delete ent.abilityState.blastPack;
+        boomAt(planted.pos, 4, 50, 15, ent, 'Blast Pack');
+        const push = V3(ent.pos.x-planted.pos.x, 1.2, ent.pos.z-planted.pos.z).normalize();
+        ent.vel.addScaledVector(push, 9); ent.grounded=false;
+        used=false;
+      } else {
+        const dir = dirFromYawPitch(ent.yaw, ent.pitch);
+        ent.abilityState.blastPack = { pos:eyePos(ent).clone().addScaledVector(dir,2).setY(Math.max(.1, ent.pos.y+.2)), until:G.now+5 };
+        targetRing(ent.abilityState.blastPack.pos.clone().setY(0), 2, 500, 0xff9a3d, ent);
+        schedule(5, ()=>{ if(ent.abilityState.blastPack){ boomAt(ent.abilityState.blastPack.pos,4,50,15,ent,'Blast Pack'); delete ent.abilityState.blastPack; } }, 'blast-pack');
+      }
       break;
     }
     case 'rocketUlt':
@@ -637,20 +712,32 @@ export function performAbility(ent, key, slot, def, opts={}){
       break;
     // ---- 青鸩 ----
     case 'toxicSmoke': {
-      const p = aimPoint(ent, 40);
-      spawnSmoke(p, 3.8, 11);
-      spawnZone('toxic', p, 3.4, 11, 8, ent);
+      const deployed = ent.abilityState.toxicSmoke;
+      if(deployed){
+        deployed.active = !deployed.active; setViperEmitter(ent,'cloud',deployed.active); used=false;
+        if(deployed.active){ deployed.smoke=spawnSmoke(deployed.pos,3.8,90); deployed.zone=spawnZone('toxic',deployed.pos,3.4,90,8,ent); }
+        else { if(deployed.smoke) deployed.smoke.until=G.now; if(deployed.zone) deployed.zone.until=G.now; }
+      } else {
+        const p = aimPoint(ent, 40);
+        ent.abilityState.toxicSmoke = { pos:p, active:true, smoke:spawnSmoke(p,3.8,90), zone:spawnZone('toxic',p,3.4,90,8,ent) };
+        setViperEmitter(ent,'cloud',true);
+      }
       break;
     }
     case 'acidPool':
       throwProj(ent, 'acid', opts.alt?7:22, opts.alt?2.2:3); sfx.ability(); break;
     case 'toxicWall': {
-      const dir = dirFromYawPitch(ent.yaw, 0);
-      for(let i=0;i<7;i++){
-        const p = V3(ent.pos.x + dir.x*(4+i*3), 0, ent.pos.z + dir.z*(4+i*3));
-        spawnSmoke(p, 2.4, 12);
+      const deployed = ent.abilityState.toxicWall;
+      if(deployed){
+        deployed.active=!deployed.active; setViperEmitter(ent,'screen',deployed.active); used=false;
+        if(deployed.active) deployed.smokes=deployed.points.map(p=>spawnSmoke(p,2.4,90));
+        else for(const smoke of deployed.smokes||[]) smoke.until=G.now;
+      } else {
+        const dir = dirFromYawPitch(ent.yaw, 0), points=[];
+        for(let i=0;i<10;i++) points.push(V3(ent.pos.x+dir.x*(4+i*3),0,ent.pos.z+dir.z*(4+i*3)));
+        ent.abilityState.toxicWall={ points, active:true, smokes:points.map(p=>spawnSmoke(p,2.4,90)) };
+        setViperEmitter(ent,'screen',true);
       }
-      ent.abCd.e = G.now + (def.cd||32);
       break;
     }
     case 'toxicDome': {
@@ -670,6 +757,13 @@ export function performAbility(ent, key, slot, def, opts={}){
     case 'nullPulse': {
       popSuppress(V3(ent.pos.x, ent.pos.y+1, ent.pos.z), 16, 6, ent);
       ent.stimUntil = G.now + 8;
+      sfx.ultReady();
+      break;
+    }
+    case 'kayoNullCmd': {
+      popSuppress(V3(ent.pos.x,ent.pos.y+1,ent.pos.z),18,4,ent);
+      ent.abilityState.nullCmdUntil=G.now+12;
+      ent.stimUntil=G.now+12;
       sfx.ultReady();
       break;
     }
@@ -1108,7 +1202,17 @@ export function updateProjectiles(dt){
       removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
     }
     if(!p.mesh) attachProjectileVisual(p);
-    if(p.type==='drone'){
+    if(p.type==='controlledScout'){
+      if(G.now>=p.until || !p.owner.alive){
+        if(G.controlMode?.unit===p) endControl(G);
+        removeProjectileVisual(p); G.projectiles.splice(i,1); continue;
+      }
+      const dir=p.vel.clone(); const step=dir.length()*dt;
+      if(step>0){ dir.normalize(); const wall=rayWalls(p.pos,dir,step+.2); if(wall<=step+.1) p.vel.multiplyScalar(-.25); else p.pos.addScaledVector(dir,step); }
+      if(G.now>=p.nextPing){ p.nextPing=G.now+.8; revealArea(p.pos.clone().setY(0),7,1.2,p.team); }
+      updateProjectileVisual(p,dt);
+      continue;
+    } else if(p.type==='drone'){
       // 侦察机：无重力直线巡航，周期性扫描显形
       if(G.now >= p.nextPing){
         p.nextPing = G.now + .45;

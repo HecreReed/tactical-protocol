@@ -8,6 +8,7 @@ const LIM = WORLD/2 - .5;
 import { tracer, impactFX, bloodFX, muzzleFX, addMesh, spawnDrop } from './effects.js?v=28';
 import { sfx } from './audio.js?v=28';
 import { damageUtility } from './abilityRuntime.js';
+import { handleAgentKill, resolveAgentFatality } from './agentMechanics.js';
 
 let nextId = 1;
 
@@ -210,6 +211,7 @@ export function applyDamage(target, dmg, killer, weaponName, part){
 }
 
 export function killEnt(target, killer, weaponName, part){
+  if(resolveAgentFatality(target, G.now).prevented) return;
   const R = G.report;
   if(R && killer && killer !== target){
     if(killer.isPlayer && !target.isPlayer){
@@ -230,6 +232,7 @@ export function killEnt(target, killer, weaponName, part){
     killer.lastKillAt = G.now;
     killer.money = Math.min(9000, killer.money + 200);
     killer.ult = Math.min(9, killer.ult + 1);
+    handleAgentKill(killer, target, G.now);
     if(killer.knifeUlt > 0) killer.knifeUlt = 5;
     // 魅影女皇仪式：击杀全额回血并刷新持续时间
     if((killer.empressUntil||0) > G.now){

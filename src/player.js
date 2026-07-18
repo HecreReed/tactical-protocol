@@ -3,7 +3,7 @@ import { G, sens } from './state.js?v=28';
 import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=28';
 import { SKINS, AGENTS } from './config.js?v=28';
 import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=28';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=28';
+import { useAbility, startCast, confirmCast, cancelCast, steerControlledUnit, THROW_PARAMS } from './abilities.js?v=28';
 import { tracer, spawnSmoke } from './effects.js?v=28';
 import { sfx } from './audio.js?v=28';
 
@@ -344,6 +344,7 @@ export function updatePlayer(dt){
   const p = G.player;
   if(!p) return;
   if(!p.alive){ spectate(dt); return; }
+  if(steerControlledUnit(p,dt)) return;
   G.spectatingEnt = null;
 
   const phase = G.match?.phase;
@@ -380,7 +381,7 @@ export function updatePlayer(dt){
     p.vel.y = 5.6; p.grounded = false;
   }
   // 风影被动：空中按住空格滑翔（缓降）
-  p.glide = p.agent==='fengying' && !p.grounded && !!G.keys['Space'] && canMove;
+  p.glide = p.agent==='jett' && !p.grounded && !!G.keys['Space'] && canMove;
   moveEntity(p, dt);
 
   // footsteps
