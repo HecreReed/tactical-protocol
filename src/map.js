@@ -6,10 +6,12 @@ const HALF = WORLD/2;
 // 每图主题：mountain 山地起伏 / city 城市天际 / temple 庙宇屋脊 / harbor 港口集装箱
 const MAP_THEMES = { chongqing:'mountain', liexia:'mountain', xuefeng:'mountain',
   gumiao:'temple', yiji:'temple', santa:'city', huanjie:'city', rongcheng:'city',
-  sixiang:'temple', tiangang:'harbor' };
+  sixiang:'temple', tiangang:'harbor', yunque:'temple', chaomen:'harbor',
+  chilian:'harbor', jingcheng:'city', longji:'mountain' };
 const GROUND_TONE = { chongqing:0xb7a894, liexia:0xb0a898, xuefeng:0xe2e8ee,
   gumiao:0xcabd9e, yiji:0xbfb8a8, santa:0xc4bfae, huanjie:0x9aa0a8,
-  rongcheng:0xa89890, sixiang:0xb8b0a0, tiangang:0xa8b4bc };
+  rongcheng:0xa89890, sixiang:0xb8b0a0, tiangang:0xa8b4bc, yunque:0xaeb3a6,
+  chaomen:0x82999c, chilian:0x777b7d, jingcheng:0x929da3, longji:0x92958a };
 const OLD_MAPS = [
   {
     id:"yiji", name:"遗迹", desc:"双点·走廊网络·A天台·中路广场·猫道窗口·市场",
@@ -1417,12 +1419,36 @@ export function buildMap(scene, mapId){
 
 export function validateMaps(){
   const out={};
+  const previousMap=G.map, previousColliders=G.colliders;
+  const point=(raw)=>{
+    if(Array.isArray(raw)) return V3(raw[0],raw[2]??0,raw[1]);
+    if(raw?.p) return V3(raw.p[0],raw.y??raw.p[2]??0,raw.p[1]);
+    return V3(raw.x,raw.y??0,raw.z);
+  };
   for(const md of MAPS){
     const open=md.open.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
     const colliders=buildColliders(md, open);
     const nav=buildNav(md, colliders);
-    out[md.id]={totalCells:nav.wps.length, unreachable:nav.wps.length<1?1:0};
+    G.map={id:md.id,wps:nav.wps,edges:nav.edges,openRects:md.open};
+    G.colliders=colliders;
+    const destinations=[];
+    for(const [site,data] of Object.entries(md.sites)) destinations.push([`${site}:plant`,data.plant]);
+    for(const [site,data] of Object.entries(md.stages||{})) destinations.push([`${site}:stage`,data]);
+    (md.defPostList||[]).forEach((data,i)=>destinations.push([`def:${i}`,data]));
+    for(const [site,holds] of Object.entries(md.atkHolds||{})) holds.forEach((data,i)=>destinations.push([`${site}:hold:${i}`,data]));
+    const failures=[];
+    let criticalRoutes=0;
+    [...md.spawns.atk,...md.spawns.def].forEach((spawn,spawnIndex)=>{
+      const from=point(spawn);
+      for(const [label,raw] of destinations){
+        criticalRoutes++;
+        const to=snapToNav(point(raw));
+        if(navDistance(from,to)>1.1&&!findPath(from,to,spawnIndex+1).length) failures.push(`spawn:${spawnIndex}->${label}`);
+      }
+    });
+    out[md.id]={totalCells:nav.wps.length,criticalRoutes,unreachable:failures.length,failures};
   }
+  G.map=previousMap;G.colliders=previousColliders;
   return out;
 }
 
