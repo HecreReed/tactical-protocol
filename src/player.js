@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { G, sens } from './state.js?v=25';
-import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=25';
-import { SKINS, AGENTS } from './config.js?v=25';
-import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=25';
-import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=25';
-import { tracer, spawnSmoke } from './effects.js?v=25';
-import { sfx } from './audio.js?v=25';
+import { G, sens } from './state.js?v=26';
+import { V3, clamp, dirFromYawPitch, gauss, deg, lerp } from './utils.js?v=26';
+import { SKINS, AGENTS } from './config.js?v=26';
+import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyeH, eyePos, traceRay, applyDamage, rayWalls } from './combat.js?v=26';
+import { useAbility, startCast, confirmCast, cancelCast, THROW_PARAMS } from './abilities.js?v=26';
+import { tracer, spawnSmoke } from './effects.js?v=26';
+import { sfx } from './audio.js?v=26';
 
 const P = {
   recoilPitch: 0, recoilYaw: 0, bloom: 0,
@@ -370,7 +370,9 @@ export function updatePlayer(dt){
   if(l>0){ wx/=l; wz/=l; }
   const dashing = G.now < p.dashUntil;
   if(!dashing){
-    const accel = p.grounded ? 40 : 8;
+    // 地面：加速 60 / 松键急停 92（CS 式急停手感，配合首发精准）；空中弱操控
+    const hasInput = l > 0;
+    const accel = p.grounded ? (hasInput ? 60 : 92) : 11;
     p.vel.x = approach(p.vel.x, wx*spd, accel*dt);
     p.vel.z = approach(p.vel.z, wz*spd, accel*dt);
   }
@@ -481,7 +483,7 @@ export function updatePlayer(dt){
   const rec = w.def.recoil;
   P.recoilPitch = approach(P.recoilPitch, 0, (rec.decay||30)*8*dt);
   P.recoilYaw = approach(P.recoilYaw, 0, (rec.decay||30)*5*dt);
-  P.bloom = approach(P.bloom, 0, 4.4*dt);
+  P.bloom = approach(P.bloom, 0, 5.4*dt);
   P.vmKick = approach(P.vmKick, 0, .5*dt);
   P.camShake = approach(P.camShake, 0, 3*dt);
 
@@ -525,8 +527,8 @@ export function updatePlayer(dt){
   updateCamera(p, dt);
 }
 
-import { hitSpheres } from './combat.js?v=25';
-import { raySphere } from './utils.js?v=25';
+import { hitSpheres } from './combat.js?v=26';
+import { raySphere } from './utils.js?v=26';
 function traceThroughWalls(o, dir, e){
   let best = null;
   for(const s of hitSpheres(e)){
@@ -538,27 +540,34 @@ function traceThroughWalls(o, dir, e){
 
 function shootPlayer(p, w, dt){
   w.ammo--;
-  if(G.now - w.lastShot > .4) w.shots = 0;
+  // 连发计数恢复期与射速挂钩：点射间稍作停顿即可找回首发精准
+  const recover = clamp(w.def.fi * 1.9, .22, .5);
+  if(G.now - w.lastShot > recover) w.shots = 0;
   w.shots++;
   w.lastShot = G.now;
   w.nextFire = G.now + w.def.fi * (G.now < p.stimUntil ? .85 : 1);
 
   const ads = p.ads, adsDef = w.def.ads;
   const hspd = Math.hypot(p.vel.x, p.vel.z);
-  const moveFactor = clamp(hspd/6, 0, 1);
-  let spread = w.def.spread.base + moveFactor*w.def.spread.mv*2.3 + P.bloom;
-  // 首发精准（原版手感）：停枪 0.35s 后第一发几乎必中准星
-  if(w.shots <= 1 && moveFactor < .35) spread *= .3;
+  // 移动死区：急停/微调步不惩罚精度（无畏契约式急停开枪）
+  const moveFactor = clamp((hspd - 1.1)/4.9, 0, 1);
+  let spread = w.def.spread.base + moveFactor*w.def.spread.mv*2.6 + P.bloom;
   if(ads) spread *= adsDef.spread ?? .6;
-  if(p.crouch) spread *= .8;
-  if(!p.grounded) spread *= 2.5;
+  if(p.crouch) spread *= .75;
+  if(!p.grounded) spread *= 3;
   if(G.now < p.dazeUntil) spread *= 1.8;
+  // 首发精准（无畏契约式）：站稳时前几发几乎必中准星
+  const firstN = w.def.cat==='sniper' ? 1 : 3;
+  const onCross = w.shots <= firstN && w.def.cat!=='shotgun';
+  const steady = p.grounded && moveFactor < .3;
+  if(onCross && steady) spread *= [.03, .14, .32][w.shots-1] ?? 1;
   const spreadRad = deg(spread);
 
-  // recoil offsets applied to shot dir
+  // 后座偏移：前几发弹道贴合准星实际显示位置（所见即所得），之后按完整后座上跳
+  const vis = deg(P.recoilPitch*.01)*.5;   // 与相机视觉后座量一致
   const recScale = ads ? (adsDef.recoil ?? .7) : 1;
-  const yawOff = deg(P.recoilYaw*.01) * recScale;
-  const pitchOff = deg(P.recoilPitch*.01) * recScale;
+  const yawOff = onCross ? 0 : deg(P.recoilYaw*.01) * recScale;
+  const pitchOff = onCross ? vis : deg(P.recoilPitch*.01) * recScale;
 
   const dir = dirFromYawPitch(p.yaw, p.pitch);
   fireShot(p, dir, w.def, spreadRad, {yawOff, pitchOff, color: playerTracerColor()});
@@ -567,7 +576,7 @@ function shootPlayer(p, w, dt){
   const rec = w.def.recoil;
   P.recoilPitch = Math.min(rec.cap, P.recoilPitch + rec.perShot*(1 + w.shots*.06));
   P.recoilYaw += (Math.sin(w.shots*.9) + gauss()*.4) * rec.wander;
-  P.bloom += w.def.spread.bloom * .2;
+  P.bloom += w.def.spread.bloom * (w.shots<=firstN ? .12 : .2);
   P.vmKick = Math.min(.12, P.vmKick + .035);
   P.camShake = Math.min(1, P.camShake + .25);
 }

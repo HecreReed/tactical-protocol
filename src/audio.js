@@ -1,5 +1,5 @@
-import { G } from './state.js?v=25';
-import { clamp } from './utils.js?v=25';
+import { G } from './state.js?v=26';
+import { clamp } from './utils.js?v=26';
 
 let ctx = null, master = null;
 

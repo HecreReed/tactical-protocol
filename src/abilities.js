@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=25';
-import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=25';
-import { AGENTS } from './config.js?v=25';
-import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=25';
-import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=25';
-import { inAnyOpen } from './map.js?v=25';
-import { sfx } from './audio.js?v=25';
-import { raySphere } from './utils.js?v=25';
+import { G } from './state.js?v=26';
+import { V3, dirFromYawPitch, dist2d, yawTo, deg, rand, angDiff, clamp, gauss } from './utils.js?v=26';
+import { AGENTS } from './config.js?v=26';
+import { spawnSmoke, spawnZone, spawnWall, targetRing, teleportFX, flashFX, spawnTurret, spawnTrap, spawnDevice, suppressFX, explosionFX, tracer, removeMesh, attachProjectileVisual, updateProjectileVisual, removeProjectileVisual } from './effects.js?v=26';
+import { eyePos, rayWalls, traceRay, makeWeapon, applyDamage, hitSpheres, losBlocked } from './combat.js?v=26';
+import { inAnyOpen, colQuery } from './map.js?v=26';
+import { sfx } from './audio.js?v=26';
+import { raySphere } from './utils.js?v=26';
 
 export function initAbilities(ent){
   const a = AGENTS[ent.agent];
@@ -881,7 +881,7 @@ export function botCast(bot, key, point, target){
           if(!t.alive || !bot.alive) return;
           const o = eyePos(bot);
           const dir = V3().subVectors(eyePos(t), o).normalize();
-          import('./effects.js?v=25').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
+          import('./effects.js?v=26').then(fx=> fx.tracer(o, eyePos(t), 0x80c0ff));
           sfx.shot('ult', G.player? o.distanceTo(G.player.pos):0);
           if(Math.random() < .7) applyDamage(t, 90, bot, '猎杀之矢', 'b');
         }, i*600);
@@ -923,6 +923,39 @@ export function sellAbility(ent, key){
   return true;
 }
 
+// ---------- 投掷物弹跳物理：墙面/箱体反弹 + 落地衰减滚动，静止或超时后生效 ----------
+const BOUNCY = new Set(['smoke','flash','molly','slow','shock','nade','bignade','frag','acid','hot','nanoproj']);
+function projBlocked(pos, r){
+  const lists = [colQuery(pos.x-r-.5, pos.z-r-.5, pos.x+r+.5, pos.z+r+.5), G.dynColliders];
+  for(const list of lists) for(const b of list){
+    if(pos.x+r>b.min.x && pos.x-r<b.max.x &&
+       pos.y+r>b.min.y && pos.y-r<b.max.y &&
+       pos.z+r>b.min.z && pos.z-r<b.max.z) return true;
+  }
+  return false;
+}
+function stepBouncy(p, dt){
+  const r = .12, damp = .45;
+  // 分轴积分：碰撞轴反弹衰减，切向轴摩擦减速
+  p.pos.x += p.vel.x*dt;
+  if(projBlocked(p.pos, r)){ p.pos.x -= p.vel.x*dt; p.vel.x *= -damp; p.vel.z *= .88; }
+  p.pos.z += p.vel.z*dt;
+  if(projBlocked(p.pos, r)){ p.pos.z -= p.vel.z*dt; p.vel.z *= -damp; p.vel.x *= .88; }
+  p.pos.y += p.vel.y*dt;
+  if(p.pos.y <= r){
+    p.pos.y = r;
+    if(p.vel.y < -4.2){ p.vel.y *= -.32; p.vel.x *= .72; p.vel.z *= .72; }
+    else return true;                                   // 轻触地面：落定生效
+  } else if(projBlocked(p.pos, r)){
+    p.pos.y -= p.vel.y*dt;
+    if(p.vel.y < 0 && p.vel.y > -4.2) return true;      // 缓落箱顶：落定生效
+    p.vel.y *= -.32;
+  }
+  // 滚动到几乎静止，或飞行超时 → 生效
+  if(Math.hypot(p.vel.x, p.vel.z) < 1 && Math.abs(p.vel.y) < 1 && p.pos.y < 1.2) return true;
+  return G.now - p.born > 3.2;
+}
+
 export function updateProjectiles(dt){
   for(let i=G.projectiles.length-1;i>=0;i--){
     const p = G.projectiles[i];
@@ -949,17 +982,21 @@ export function updateProjectiles(dt){
     } else {
       p.vel.y -= (p.type==='rocket' ? 2.5 : 11)*dt;
     }
-    const step = p.vel.length()*dt;
-    const dir = p.vel.clone().normalize();
-    const wallD = rayWalls(p.pos, dir, step + .2);
     let landed = false;
-    if(wallD <= step + .1){
-      p.pos.addScaledVector(dir, Math.max(0, wallD - .1));
-      landed = true;
+    if(BOUNCY.has(p.type)){
+      landed = stepBouncy(p, dt);
     } else {
-      p.pos.addScaledVector(dir, step);
+      const step = p.vel.length()*dt;
+      const dir = p.vel.clone().normalize();
+      const wallD = rayWalls(p.pos, dir, step + .2);
+      if(wallD <= step + .1){
+        p.pos.addScaledVector(dir, Math.max(0, wallD - .1));
+        landed = true;
+      } else {
+        p.pos.addScaledVector(dir, step);
+      }
+      if(p.pos.y <= .15){ p.pos.y = .15; landed = true; }
     }
-    if(p.pos.y <= .15){ p.pos.y = .15; landed = true; }
     // 闪光弹空中起爆
     if(p.type==='flash' && !landed && G.now - p.born > .55) landed = true;
     // 火箭弹直接命中检测

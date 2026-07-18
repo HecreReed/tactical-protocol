@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { G } from './state.js?v=25';
-import { V3 } from './utils.js?v=25';
-import { sfx } from './audio.js?v=25';
+import { G } from './state.js?v=26';
+import { V3 } from './utils.js?v=26';
+import { sfx } from './audio.js?v=26';
 
 const pools = { tracers:[], flashes:[] };
 let scene;
