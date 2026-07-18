@@ -373,7 +373,7 @@ function spawnControlledScout(ent, scoutType, duration, speed=7){
     pos:eyePos(ent).clone().addScaledVector(dir,.9), vel:dir.clone().multiplyScalar(speed),
     born:G.now, until:G.now+duration, nextPing:G.now+.5 };
   G.projectiles.push(unit);
-  beginControl(G, ent, unit, unit.until);
+  if(ent.isPlayer) beginControl(G, ent, unit, unit.until);
   return unit;
 }
 
@@ -951,7 +951,7 @@ export function performAbility(ent, key, slot, def, opts={}){
     }
     case 'cypherSpycam': {
       const p=aimPoint(ent,16); const unit={type:'controlledScout',scoutType:'camera',owner:ent,team:ent.team,pos:V3(p.x,1.8,p.z),vel:V3(),born:G.now,until:G.now+12,nextPing:G.now+.5};
-      G.projectiles.push(unit); beginControl(G,ent,unit,unit.until); break;
+      G.projectiles.push(unit); if(ent.isPlayer)beginControl(G,ent,unit,unit.until); break;
     }
     case 'cypherNeuralTheft': {
       if(!canNeuralTheft(ent,G.corpses,G.now)){used=false;sfx.deny();break;}
@@ -1305,7 +1305,13 @@ export function botCast(bot, key, point, target){
       }
       break;
     }
-    default: used = false;
+    default:
+      if(point){
+        bot.yaw=yawTo(bot.pos,point);
+        const d=Math.max(.1,dist2d(bot.pos,point));
+        bot.pitch=clamp(Math.atan2((point.y||0)+.6-(bot.pos.y+1.5),d),-.8,.5);
+      }
+      used=performAbility(bot,key,slot,def,{});
   }
   if(used){
     if(key==='x') bot.ult = 0;

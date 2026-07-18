@@ -77,6 +77,9 @@ const P = {
 const FALLBACK = '<circle cx="12" cy="12" r="7"/>';
 
 export function abilityIcon(defOrType, cls=''){
+  if(typeof defOrType==='object' && defOrType?.icon){
+    return `<img class="abIcon ${cls}" src="${defOrType.icon}" alt="" loading="lazy">`;
+  }
   const t = typeof defOrType === 'string' ? defOrType : (defOrType?.icon || defOrType?.type);
   return `<svg class="abIcon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${P[t]||FALLBACK}</svg>`;
 }

@@ -434,6 +434,32 @@ const pushing = a => a.state==='advance' || a.state==='execute';
 const FAKE_UTIL = new Set(['flash','shock','molly','nade','bignade','fragNade','acidPool','suppressNade',
   'paranoia','quake','wallFlash','slowProj','smokeProj','smokeSky','toxicSmoke','cage']);
 
+function genericBotAbilities(bot, context){
+  const { inCombat, hurt, safeTime, executing, enemyChanneling, target, spike } = context;
+  const aim = target?.pos || enemyChanneling?.pos || (executing ? bot.ai.goal : null) || spike?.pos || bot.ai.lastSeenPos;
+  for(const key of ['x','e','q','c']){
+    const slot=bot.ab[key],ability=slot?.def;
+    if(!ability)continue;
+    if(key==='x'&&bot.ult<AGENTS[bot.agent].ultCost)continue;
+    if(key!=='x'&&(slot.n<=0||(key==='e'&&G.now<bot.abCd.e)))continue;
+    let should=false;
+    switch(ability.intent){
+      case 'heal': should=hurt&&safeTime;break;
+      case 'escape': should=hurt&&inCombat;break;
+      case 'cover': should=executing||enemyChanneling;break;
+      case 'info': should=executing||(!inCombat&&G.now-bot.ai.lastSeenAt<3);break;
+      case 'setup': should=!inCombat&&(bot.ai.state==='hold'||bot.ai.state==='post'||executing);break;
+      case 'weapon': should=inCombat&&!bot.weapons.primary;break;
+      case 'ultimate': should=inCombat||executing||!!enemyChanneling;break;
+      case 'control': case 'damage': case 'entry': should=inCombat||executing||!!enemyChanneling;break;
+    }
+    if(!should||!tryGate(bot.ai,key,key==='x'?10:5))continue;
+    if(aim)bot.yaw=yawTo(bot.pos,aim);
+    if(botCast(bot,key,aim||bot.pos,target))return true;
+  }
+  return false;
+}
+
 function botAbilities(bot){
   const a = bot.ai, m = G.match, side = sideOf(bot);
   const t = a.target;
@@ -798,6 +824,7 @@ function botAbilities(bot){
       break;
     }
   }
+  genericBotAbilities(bot,{inCombat,hurt,safeTime,executing,enemyChanneling,target:t,spike:sp});
 }
 
 // 购买阶段：在天幕内自由走动/张望（漫步点先做视线检查，修复开局顶墙搓步）

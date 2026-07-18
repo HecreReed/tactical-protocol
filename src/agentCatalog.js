@@ -1,6 +1,19 @@
+const abilityIntent = (type,key) => {
+  if(key==='x') return 'ultimate';
+  if(/heal|regrowth|pickmeup|harmonize/i.test(type)) return 'heal';
+  if(/smoke|wall|cage|cover|cove|contingency|divide|fastlane|hightide/i.test(type)) return 'cover';
+  if(/dash|step|rendezvous|refract|gatecrash|crosscut|lightspeed|highgear|tailwind/i.test(type)) return 'escape';
+  if(/recon|drone|haunt|spycam|neural|seek|dizzy|prowler|trailblazer/i.test(type)) return 'info';
+  if(/turret|trap|sensor|barrier|interceptor|rose|shear|razor|nano|alarm|lockdown|trademark/i.test(type)) return 'setup';
+  if(/weapon|headhunter|tourdeforce|knife|overdrive|doubletap/i.test(type)) return 'weapon';
+  if(/flash|stun|pulse|leer|paranoia|seize|grav|undercut|meddle|choke|storm|nova|gravity/i.test(type)) return 'control';
+  if(/nade|molly|shock|mosh|salvo|delivery|armageddon|saturate|acid|aftershock|frag/i.test(type)) return 'damage';
+  return 'entry';
+};
+
 const slot = (id, key, name, type, cost, max, start, cd=0, extra={}) => ({
   name, type, impl:`${id}-${key}-${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`,
-  cost, max, start, cd, icon:`./assets/agents/${id}/${key}.png`, ...extra,
+  cost, max, start, cd, intent:abilityIntent(type,key), icon:`./assets/agents/${id}/${key}.png`, ...extra,
 });
 
 const agent = (id, name, role, color, ultCost, desc, abilities) => ({

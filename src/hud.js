@@ -86,7 +86,7 @@ function playerFlashed(dur){
   }, dur*250);
 }
 
-// ---------- 震慑（岚切/绊网） ----------
+// ---------- concuss overlay ----------
 let dazeTimer = null;
 function playerDazed(dur){
   const el = els.flashOverlay;
@@ -99,7 +99,7 @@ function playerDazed(dur){
   }, 120);
 }
 
-// ---------- 天穹战术地图下烟（原版炼狱式） ----------
+// ---------- controller tactical targeting map ----------
 const sMap = { open:false, ent:null, key:null, placed:0 };
 function openSmokeMap(ent, key, mode='smoke'){
   if(sMap.open) return;
@@ -307,7 +307,7 @@ export function showAgentSelect(cb){
     const card = document.createElement('div');
     card.className = 'agentCard';
     card.style.setProperty('--ac', '#'+a.color.toString(16).padStart(6,'0'));
-    card.innerHTML = `<div class="icon">${a.emoji}</div><h2>${a.name}</h2><div class="role">${a.role} · ${a.desc}</div>
+    card.innerHTML = `<img class="portrait" src="${a.portrait}" alt="${a.name}" loading="lazy"><h2>${a.name}</h2><div class="role">${a.role} · ${a.desc}</div>
       <ul>
         <li>${abilityIcon(a.ab.c)}<span class="k">C</span><b>${a.ab.c.name}</b></li>
         <li>${abilityIcon(a.ab.q)}<span class="k">Q</span><b>${a.ab.q.name}</b></li>
@@ -469,7 +469,7 @@ function showBoard(show){
   els.sbBody.innerHTML = rows.map(e=>{
     const w = e.weapons.primary?.def.name || e.weapons.secondary?.def.name || '';
     const a = AGENTS[e.agent];
-    const label = e.isPlayer ? `${a.emoji} ${a.name}（你）` : `${a.emoji} ${a.name}`;
+    const label = e.isPlayer ? `${a.name}（你）` : a.name;
     return `<tr class="${e.isPlayer?'me':''} ${e.alive?'':'dead'}">
       <td class="${e.team==='ally'?'tAlly':'tEnemy'}">${label}</td>
       <td>${a.role}</td><td>${e.kills}</td><td>${e.deaths}</td>
@@ -647,7 +647,7 @@ export function updateHUD(){
   // 战斗报告：购买阶段显示上回合数据（无畏契约式）
   renderCombatReport(m.phase === 'buy' && !!p);
 
-  // 天穹战术地图：死亡/回合结束自动收起，打开时实时刷新
+  // Close the tactical targeter on death or round end.
   if(sMap.open){
     const ph = m.phase;
     if(!sMap.ent?.alive || (ph!=='live' && ph!=='planted')) closeSmokeMap(false);
@@ -781,7 +781,7 @@ function renderTeamBar(){
   if(sig===tbCache) return;
   tbCache = sig;
   els.teamBar.innerHTML = rows.map(({e,enemy})=>
-    `<div class="tm ${e.alive?'':'dead'} ${enemy?'foe':''}"><span>${AGENTS[e.agent].emoji}</span><span>${e.name}</span>
+    `<div class="tm ${e.alive?'':'dead'} ${enemy?'foe':''}"><img src="${AGENTS[e.agent].portrait}" alt=""><span>${e.name}</span>
      <span class="hpbar"><i style="width:${e.alive?Math.ceil(e.hp):0}%"></i></span>
      <span class="hp">${e.alive?Math.ceil(e.hp):'☠'}</span></div>`).join('');
 }

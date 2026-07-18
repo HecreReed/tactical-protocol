@@ -66,9 +66,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .ab{width:58px;height:58px;background:var(--panel);border:1px solid #2b3b47;position:relative;display:flex;align-items:center;justify-content:center}
 .ab.empty{opacity:.35}
 .ab .ic{font-size:24px;display:flex}
-.ab .ic svg{width:27px;height:27px;color:var(--white)}
-.ab.ult .ic svg{color:var(--gold)}
-.ab.ready .ic svg{color:var(--teal)}
+.ab .ic .abIcon{width:28px;height:28px;object-fit:contain;filter:brightness(1.5)}
+.ab.ult .ic .abIcon{filter:sepia(1) saturate(1.5) brightness(1.45)}
+.ab.ready .ic .abIcon{filter:brightness(1.7) drop-shadow(0 0 4px var(--teal))}
 .ab .key{position:absolute;left:4px;top:2px;font-size:10px;color:var(--dim)}
 .ab .n{position:absolute;right:4px;bottom:2px;font-size:12px;font-weight:700;color:var(--gold)}
 .ab.ult{border-color:var(--gold)}
@@ -103,6 +103,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #scope::after{top:0;bottom:0;left:50%;width:1px}
 #teamBar{position:absolute;top:8px;left:260px;display:flex;flex-direction:column;gap:3px;max-height:70vh;overflow:hidden}
 .tm{display:flex;gap:8px;align-items:center;font-size:11px;background:var(--panel);padding:2px 8px;border-left:2px solid var(--teal);min-width:190px}
+.tm>img{width:20px;height:20px;object-fit:contain;background:#0d1720}
 .tm.foe{border-left-color:var(--red)}
 .tm.dead{opacity:.35;border-left-color:#444}
 .tm .hp{color:var(--dim);margin-left:4px;width:24px;text-align:right}
@@ -148,7 +149,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .bitem.owned::after{content:"已装备";position:absolute;right:6px;top:6px;font-size:10px;color:var(--teal)}
 .bitem.sellable::after{content:"已装备 · 右键出售";color:var(--gold)}
 .bitem.noafford{opacity:.4;cursor:not-allowed}
-.abitem .nm svg{width:15px;height:15px;vertical-align:-3px;margin-right:4px;color:var(--teal)}
+.abitem .nm .abIcon{width:15px;height:15px;object-fit:contain;vertical-align:-3px;margin-right:4px}
 #buyClose{position:absolute;right:18px;top:14px;font-size:13px;color:var(--dim);cursor:pointer;letter-spacing:2px}
 #buyClose:hover{color:var(--white)}
 
@@ -164,18 +165,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 
 /* ---------- Overlays ---------- */
 .overlay{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 30%,#16232f 0%,#0a121a 70%);z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;overflow-y:auto}
+#agentSelect{justify-content:flex-start;padding:34px 18px;box-sizing:border-box}
 .overlay h1{font-size:34px;letter-spacing:10px;font-weight:900}
 .overlay h1 span{color:var(--red)}
 .overlay .sub{color:var(--dim);letter-spacing:3px;font-size:13px;margin:8px 0 18px}
-#agentCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:1080px}
-.agentCard{width:158px;background:#131e29;border:1px solid #24333f;padding:14px 12px;cursor:pointer;transition:.15s;text-align:center}
+#agentCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px;width:min(1240px,calc(100vw - 36px))}
+.agentCard{min-width:0;background:#131e29;border:1px solid #24333f;padding:0 10px 11px;cursor:pointer;transition:.15s;text-align:center;overflow:hidden}
 .agentCard:hover{border-color:var(--red);transform:translateY(-6px)}
-.agentCard .icon{font-size:34px;margin-bottom:4px}
-.agentCard h2{font-size:18px;letter-spacing:3px}
-.agentCard .role{color:var(--gold);font-size:11px;letter-spacing:1px;margin:2px 0 8px;min-height:28px}
+.agentCard .portrait{display:block;width:calc(100% + 20px);height:112px;margin-left:-10px;object-fit:contain;object-position:center top;background:#0d1720}
+.agentCard h2{font-size:17px;letter-spacing:0;margin-top:7px}
+.agentCard .role{color:var(--gold);font-size:10px;letter-spacing:0;margin:2px 0 7px;height:28px;line-height:14px;overflow:hidden}
 .agentCard ul{list-style:none;text-align:left;font-size:11px;color:var(--dim);line-height:1.9}
 .agentCard ul li{display:flex;align-items:center;gap:5px}
-.agentCard ul svg{width:14px;height:14px;flex:none;color:var(--ac,#8fd3ff)}
+.agentCard ul .abIcon{width:14px;height:14px;object-fit:contain;flex:none}
 .agentCard ul .k{color:var(--dim);font-size:9px;width:9px;flex:none}
 .agentCard ul b{color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agentCard ul i{color:var(--dim);font-style:normal;font-size:9px;margin-left:auto;flex:none}
@@ -200,7 +202,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #helpTip{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--dim);letter-spacing:2px;background:var(--panel);padding:4px 14px}
 #flashOverlay{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:25}
 
-/* ---------- 天穹战术下烟地图 ---------- */
+/* ---------- controller tactical map ---------- */
 #smokeMap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:22;background:rgba(8,14,20,.96);border:1px solid var(--gold);padding:14px 18px 12px;pointer-events:auto;text-align:center;box-shadow:0 0 40px rgba(0,0,0,.6)}
 #smokeMap h2{font-size:14px;letter-spacing:4px;color:var(--gold);margin-bottom:10px}
 #smokeMapCanvas{display:block;border:1px solid #24333f;cursor:crosshair;background:#0c141c}
