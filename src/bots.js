@@ -1,7 +1,7 @@
 import { G } from './state.js?v=29';
 import { V3, dist2d, yawTo, pitchTo, angDiff, clamp, rand, pick, gauss, deg, dirFromYawPitch } from './utils.js?v=29';
 import { curWeapon, moveSpeed, moveEntity, fireShot, meleeAttack, eyePos, losBlocked, updateBodyPose, rayWalls } from './combat.js?v=29';
-import { findPath, inSite, nearestWp, pathClear, snapToNav } from './map.js?v=29';
+import { findPath, inSite, nearestWp, pathClear, snapToNav, navDistance, atNavGoal } from './map.js?v=29';
 import { useAbility, botCast } from './abilities.js?v=29';
 import { removeDrop } from './effects.js?v=29';
 import { sfx } from './audio.js?v=29';
@@ -21,6 +21,7 @@ export function initBotAI(ent, i){
     role: i, planStartAt: 0, stageAt: 0, assaultRole: null,
     flags: {}, abGate: 0,
     aimHead: false, rotated: false,
+    routeSeed: i + 1, routeAttempt: 0,
     state: 'wait',
   };
 }
@@ -35,6 +36,7 @@ export function resetBotRound(ent){
   a.repositioned = false; a.introtGate = 0;
   a.lootDrop = null;
   a.lurkJoinT = 0;
+  a.routeAttempt = 0;
   a.planStartAt = G.now + rand(.1, .9);
   a.anchor = ent.pos.clone();
   a.wander = null; a.wanderT = 0; a.wanderYaw = ent.yaw;
@@ -42,6 +44,14 @@ export function resetBotRound(ent){
 
 const sideOf = ent => ent.team === 'ally' ? G.match.allySide : (G.match.allySide==='atk'?'def':'atk');
 const D = ()=> G.match.diff; // 0.55 - 1.25
+
+function tacticalPos(raw, fallbackY=0){
+  if(Array.isArray(raw)) return snapToNav(V3(raw[0], raw[2] ?? fallbackY, raw[1]));
+  if(raw?.p) return snapToNav(V3(raw.p[0], raw.y ?? raw.p[2] ?? fallbackY, raw.p[1]));
+  return snapToNav(V3(raw.x, raw.y ?? fallbackY, raw.z));
+}
+function waypointFeet(wp){ return V3(wp.x, Math.max(0,wp.y-1.1), wp.z); }
+function waypointDistance(pos, wp){ return navDistance(pos, waypointFeet(wp)); }
 
 // ---------- 武器维护（像人一样管理弹药） ----------
 function totalRangedAmmo(bot){
@@ -99,12 +109,14 @@ function findTarget(bot){
 }
 
 let pathBudget = 2;
-function setPath(bot, dest){
+function setPath(bot, dest, alternate=false){
   const a = bot.ai;
   // 每帧寻路预算：防止多个 AI 同帧 A* 造成突发卡顿（下一帧自动重试）
   if(pathBudget <= 0){ a.repathT = G.now + .15; return; }
   pathBudget--;
-  const raw = findPath(bot.pos, dest, 0.15);  // 轻微随机让路线多样但不乱
+  if(alternate) a.routeAttempt = (a.routeAttempt + 1) % 7;
+  const routeSeed = a.routeSeed + a.routeAttempt * 31;
+  const raw = findPath(bot.pos, dest, routeSeed);
   a.path = raw.length ? raw : [];
   if(raw.length){
     const dc = dest.clone ? dest.clone() : V3(dest.x,0,dest.z);
@@ -123,7 +135,7 @@ function lookaheadTarget(bot, path, pathI){
   let best = pathI;
   for(let i = pathI + 1; i < path.length && i <= pathI + maxSteps; i++){
     const wp = path[i];
-    if(dist2d(bot.pos, wp) > maxD) break;
+    if(waypointDistance(bot.pos, wp) > maxD) break;
     if(pathClear(from, wp, .45)) best = i;
   }
   return path[best];
@@ -133,9 +145,9 @@ function followPath(bot, dt, sprint=true){
   const a = bot.ai;
   if(a.pathI >= a.path.length){ bot.vel.x *= .8; bot.vel.z *= .8; return true; }
   // 如果紧贴第一个路径点则直接推进
-  if(a.pathI===0 && a.path.length>0 && dist2d(bot.pos, a.path[0]) < .55) a.pathI++;
+  if(a.pathI===0 && a.path.length>0 && waypointDistance(bot.pos, a.path[0]) < .55) a.pathI++;
   // 到达最终节点附近：减速并标记到达
-  if(a.pathI >= a.path.length - 1 && a.goal && dist2d(bot.pos, a.goal) < 1.1){
+  if(a.pathI >= a.path.length - 1 && a.goal && atNavGoal(bot.pos, a.goal, 1.1)){
     bot.vel.x *= .35; bot.vel.z *= .35; return true;
   }
   // 推进已越过的中间节点
@@ -236,12 +248,12 @@ function stuckCheck(bot, dt){
   const a = bot.ai;
   const speed = Math.hypot(bot.vel.x, bot.vel.z);
   const intent = speed > 1;
-  const moved = dist2d(bot.pos, a.lastPos);
+  const moved = navDistance(bot.pos, a.lastPos, 1);
   a.lastPos.copy(bot.pos);
 
   let progress = 0;
   if(a.goal){
-    const gd = dist2d(bot.pos, a.goal);
+    const gd = navDistance(bot.pos, a.goal);
     progress = (a.lastGoalDist||gd) - gd;
     a.lastGoalDist = gd;
   }
@@ -261,14 +273,17 @@ function stuckCheck(bot, dt){
     }
     if(a.stuckT > 1.8 && a.goal){
       a.detourT = G.now;
-      setPath(bot, a.goal);       // 重寻路（jitter 加持）
+      setPath(bot, a.goal, true);
       a.stuckT = 1.0;
     }
     if(a.stuckT > 3.5 && !a.target){
       const w = G.map.wps[nearestWp(bot.pos)];
-      bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1); bot.vel.set(0,0,0);
+      const offGraph = waypointDistance(bot.pos, w) > 2.5;
+      if(offGraph){
+        bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1); bot.vel.set(0,0,0);
+      }
       a.stuckT = 0; a.sideUntil = 0; a.backUntil = 0; a.lastGoalDist = undefined;
-      if(a.goal) setPath(bot, a.goal);
+      if(a.goal) setPath(bot, a.goal, true);
     }
     // 放弃无望目标
     if(a.stuckT > 6.5 && !a.target){
@@ -902,8 +917,8 @@ export function updateBots(dt){
         if(!a.hold){
           const posts = G.map.defPostList;
           const p = posts[a.role % posts.length];
-          a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
-          a.holdLook = V3(p.look[0],1.5,p.look[1]);
+          a.hold = tacticalPos(p);
+          a.holdLook = V3(p.look[0],p.look[2] ?? 1.5,p.look[1]);
           a.goal = a.hold;
           a.state = 'post';
           setPath(bot, a.hold);
@@ -1028,9 +1043,9 @@ function thinkAttack(bot){
   const a = bot.ai, m = G.match, sp = m.spike;
   const site = m.plan.site;
   const sd = G.map.sites[site];
-  const plantPos = V3(sd.plant[0], 0, sd.plant[1]);
+  const plantPos = tacticalPos(sd.plant);
   const stagePt = G.map.stages?.[site];
-  const stagePos = stagePt ? V3(stagePt[0],0,stagePt[1]) : plantPos;
+  const stagePos = stagePt ? tacticalPos(stagePt) : plantPos;
   const stg = m.strategy || { pace:'default', coord:'group' };
 
   // 分配进攻角色（entry / scout / flank / support）
@@ -1050,7 +1065,7 @@ function thinkAttack(bot){
     if(!a.hold){
       const holds = G.map.atkHolds[sp.site] || [];
       const h = holds[a.role % holds.length];
-      a.hold = snapToNav(V3(h.p[0],0,h.p[1])); a.holdLook = V3(h.look[0],1.5,h.look[1]);
+      a.hold = tacticalPos(h); a.holdLook = V3(h.look[0],h.look[2] ?? 1.5,h.look[1]);
     }
     a.state='hold'; a.goal = a.hold;
     if(needRepath(bot, a.hold)) setPath(bot, a.hold);
@@ -1095,12 +1110,12 @@ function thinkAttack(bot){
       if(isLurker){
         const other = G.map.siteKeys.find(k=>k!==site);
         const os = G.map.stages?.[other];
-        if(os) dest = V3(os[0],0,os[1]);
+        if(os) dest = tacticalPos(os);
         a.flags.lurk = true;
       } else if(faking){
         // 战术假打：先去假点造势（脚步+技能声拉动防守转位）
         const fs = G.map.stages?.[stg.fake];
-        if(fs) dest = V3(fs[0],0,fs[1]);
+        if(fs) dest = tacticalPos(fs);
         a.flags.faking = true;
       } else if(isScout){
         // scout goes slightly off-axis from main push
@@ -1112,7 +1127,7 @@ function thinkAttack(bot){
     }
     case 'advance': {
       if(a.flags.faking && m.fakeDone){ a.flags.faking = false; a.state = 'wait'; break; }   // 佯攻结束：转真点
-      if(dist2d(bot.pos, a.goal) < 4){
+      if(atNavGoal(bot.pos, a.goal, 4)){
         a.state = 'stage'; a.stageAt = G.now;
       } else if(needRepath(bot, a.goal)) setPath(bot, a.goal);
       break;
@@ -1152,16 +1167,16 @@ function thinkAttack(bot){
         a.state = 'execute';
         const holds = G.map.atkHolds[site] || [];
         const h = holds[a.role % holds.length];
-        a.hold = snapToNav(V3(h.p[0],0,h.p[1])); a.holdLook = V3(h.look[0],1.5,h.look[1]);
+        a.hold = tacticalPos(h); a.holdLook = V3(h.look[0],h.look[2] ?? 1.5,h.look[1]);
         a.goal = (sp.carrier===bot ? plantPos.clone() : a.hold.clone());
         setPath(bot, a.goal);
       }
       break;
     }
     case 'execute': {
-      if(sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, plantPos) < 4){
+      if(sp.carrier===bot && inSite(bot.pos) && atNavGoal(bot.pos, plantPos, 4)){
         a.state = 'plant';
-      } else if(dist2d(bot.pos, a.goal) < 3){
+      } else if(atNavGoal(bot.pos, a.goal, 3)){
         a.state='hold'; setPath(bot, a.goal);
       } else if(needRepath(bot, a.goal)) setPath(bot, a.goal);
       break;
@@ -1169,14 +1184,14 @@ function thinkAttack(bot){
     case 'plant': {
       if(!(sp.state==='carried' && sp.carrier===bot)){ a.state='wait'; break; }
       a.goal = plantPos;
-      if(dist2d(bot.pos, plantPos) > 3.5 && needRepath(bot, plantPos)) setPath(bot, plantPos);
+      if(!atNavGoal(bot.pos, plantPos, 3.5) && needRepath(bot, plantPos)) setPath(bot, plantPos);
       break;
     }
     case 'hunt': {
       if(dist2d(bot.pos, a.lastSeenPos) > 42){ a.state='wait'; break; }   // 太远不追
       a.goal = a.lastSeenPos.clone();
       if(needRepath(bot, a.goal)) setPath(bot, a.goal);
-      if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 6) a.state='wait';
+      if(atNavGoal(bot.pos, a.goal, 3) || G.now - a.lastSeenAt > 6) a.state='wait';
       break;
     }
     case 'fallback': {
@@ -1207,7 +1222,7 @@ function thinkDefend(bot){
 
   if(sp.state==='planted'){
     const defenders = G.ents.filter(e=>e.alive && sideOf(e)==='def' && !e.isPlayer);
-    const d3 = Math.hypot(bot.pos.x-sp.pos.x, bot.pos.y-sp.pos.y, bot.pos.z-sp.pos.z);
+    const d3 = navDistance(bot.pos, sp.pos, 1);
     // 只有在安全（无可见敌、近期未受伤）时才拆包
     const safe = !a.target && G.now - bot.lastDamaged > 1.5;
     if(defenders[0]===bot && d3 < 2.2 && safe){
@@ -1224,7 +1239,7 @@ function thinkDefend(bot){
     else {
       a.goal = a.lastSeenPos.clone();
       if(needRepath(bot, a.goal)) setPath(bot, a.goal);
-      if(dist2d(bot.pos, a.goal) < 3 || G.now - a.lastSeenAt > 5){ a.state='post'; a.hold=null; }
+      if(atNavGoal(bot.pos, a.goal, 3) || G.now - a.lastSeenAt > 5){ a.state='post'; a.hold=null; }
       return;
     }
   }
@@ -1243,8 +1258,8 @@ function thinkDefend(bot){
     const posts = G.map.defPostList;
     if(posts.length > 1){
       const p = posts[(a.role + 1 + Math.floor(Math.random()*(posts.length-1))) % posts.length];
-      a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
-      a.holdLook = V3(p.look[0],1.5,p.look[1]);
+      a.hold = tacticalPos(p);
+      a.holdLook = V3(p.look[0],p.look[2] ?? 1.5,p.look[1]);
       a.state='post'; a.goal = a.hold;
       setPath(bot, a.hold);
     }
@@ -1265,8 +1280,8 @@ function thinkDefend(bot){
   if(!a.hold){
     const posts = G.map.defPostList;
     const p = posts[bot.ai.role % posts.length];
-    a.hold = snapToNav(V3(p.p[0],0,p.p[1]));
-    a.holdLook = V3(p.look[0],1.5,p.look[1]);
+    a.hold = tacticalPos(p);
+    a.holdLook = V3(p.look[0],p.look[2] ?? 1.5,p.look[1]);
     a.state='post';
     setPath(bot, a.hold);
   }
@@ -1276,9 +1291,9 @@ function thinkDefend(bot){
 function needRepath(bot, dest){
   const a = bot.ai;
   if(G.now > a.repathT) return true;
-  if(a.pathI >= a.path.length) return dist2d(bot.pos, dest) > 2.5;
+  if(a.pathI >= a.path.length) return !atNavGoal(bot.pos, dest, 2.5);
   const last = a.path[a.path.length-1];
-  return dist2d(last, dest) > 3;
+  return navDistance(waypointFeet(last), dest) > 3;
 }
 
 // 无路点时的兜底直走：贴墙会自己绕
@@ -1315,24 +1330,26 @@ function navUpdate(bot, dt){
   // 进度看门狗：像真人一样绝不长时间卡死——无进展就换路，再不行瞬移到最近路点
   // 下包/拆包/持续引导中绝不触发（修复：带包 AI 在包点被看门狗反复拉扯导致下不了包）
   if(a.goal && a.path.length && a.state!=='plant' && a.state!=='defuse' && !bot.channel){
-    const gd = dist2d(bot.pos, a.goal);
+    const gd = navDistance(bot.pos, a.goal);
     if(gd > 2.4){
       if(gd < (a.wdBest ?? Infinity) - .45){ a.wdBest = gd; a.wdAt = G.now; }
       else if(G.now - (a.wdAt||G.now) > 6){
-        setPath(bot, a.goal);                          // 6 秒无进展：换一条路
+        setPath(bot, a.goal, true);
         a.wdAt = G.now;
         a.wdKick = (a.wdKick||0) + 1;
-        if(a.wdKick >= 2){                              // 连续两次仍无进展：吸附到最近路点重走
+        if(a.wdKick >= 2){
           const w = G.map.wps[nearestWp(bot.pos)];
-          bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1);
-          bot.vel.set(0,0,0);
+          if(waypointDistance(bot.pos, w) > 2.5){
+            bot.pos.x = w.x; bot.pos.z = w.z; bot.pos.y = Math.max(0, w.y - 1.1);
+            bot.vel.set(0,0,0);
+          }
           a.wdKick = 0;
         }
       }
     } else { a.wdBest = gd; a.wdAt = G.now; a.wdKick = 0; }
   }
 
-  if(a.state==='plant' && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos) && dist2d(bot.pos, a.goal||bot.pos) < 4.5){
+  if(a.state==='plant' && sp.state==='carried' && sp.carrier===bot && inSite(bot.pos) && atNavGoal(bot.pos, a.goal||bot.pos, 4.5)){
     bot.vel.x = 0; bot.vel.z = 0;
     G.hooks.plantTick?.(bot, dt);
     return;
@@ -1346,7 +1363,7 @@ function navUpdate(bot, dt){
     }
     return;
   }
-  if(a.state==='defuse' && sp.state==='planted' && dist2d(bot.pos, sp.pos) < 2.2){
+  if(a.state==='defuse' && sp.state==='planted' && atNavGoal(bot.pos, sp.pos, 2.2)){
     bot.vel.x = 0; bot.vel.z = 0;
     G.hooks.defuseTick?.(bot, dt);
     return;
@@ -1386,11 +1403,11 @@ function navUpdate(bot, dt){
       } else { bot.vel.x *= .6; bot.vel.z *= .6; }
     } else { bot.vel.x *= .6; bot.vel.z *= .6; }
   }
-  if(arrived && a.state==='fetch' && sp.state==='dropped' && dist2d(bot.pos, sp.pos)<1.4){
+  if(arrived && a.state==='fetch' && sp.state==='dropped' && atNavGoal(bot.pos, sp.pos, 1.4)){
     G.hooks.pickSpike?.(bot);
   }
   // 捡枪：到达目标掉落物
-  if(a.state==='loot' && a.lootDrop && G.drops.includes(a.lootDrop) && dist2d(bot.pos, a.lootDrop.pos) < 1.5){
+  if(a.state==='loot' && a.lootDrop && G.drops.includes(a.lootDrop) && atNavGoal(bot.pos, a.lootDrop.pos, 1.5)){
     botPickupDrop(bot, a.lootDrop);
     a.lootDrop = null;
     a.state = 'wait';

@@ -1431,6 +1431,15 @@ export function nearestWp(pos, yw=2){
   G.map.wps.forEach((w,i)=>{const d=dist2d(w,pos)+Math.abs((w.y-1.1)-pos.y)*yw;if(d<bd){bd=d;best=i;}});
   return best;
 }
+
+// Navigation goals use feet height. Vertical separation must never count as
+// arrival just because two points overlap on the minimap.
+export function navDistance(a,b, verticalWeight=1.5){
+  return Math.hypot(a.x-b.x, a.z-b.z, (a.y-b.y)*verticalWeight);
+}
+export function atNavGoal(pos, goal, radius=1.1, floorTolerance=.8){
+  return Math.abs(pos.y-goal.y) <= floorTolerance && navDistance(pos, goal) <= radius;
+}
 // 路径线段是否畅通（带玩家半径余量，检查静态和动态碰撞体；高度相对判定，支持高台/桥面）
 export function pathClear(a,b, margin=.45){
   const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z;
@@ -1486,10 +1495,14 @@ export function colQuery(minx, minz, maxx, maxz){
   return _qOut;
 }
 
-// 把目标点吸附到最近导航节点所在楼层（使高台/桥面上的驻点获得正确高度）
+// 把目标点吸附到与请求高度最接近的导航节点楼层。
 export function snapToNav(p){
   let best=null,bd=Infinity;
-  for(const w of G.map.wps){ const d=dist2d(w,p); if(d<bd){ bd=d; best=w; } }
+  for(const w of G.map.wps){
+    const feetY = w.y - 1.1;
+    const d = Math.hypot(w.x-p.x, w.z-p.z, (feetY-p.y)*2);
+    if(d<bd){ bd=d; best=w; }
+  }
   if(best) p.y = Math.max(0, best.y - 1.1);
   return p;
 }
@@ -1515,40 +1528,61 @@ function heappop(h){
   return r;
 }
 // A* 复用缓冲（generation 标记）：消除每次寻路 70KB+ 分配导致的 GC 卡顿
-let _pfG = null, _pfFrom = null, _pfGen = null, _pfGenId = 0, _pfN = 0;
-export function findPath(fromPos, toPos, jitter=0){
+let _pfG = null, _pfFrom = null, _pfGen = null, _pfClosed = null, _pfGenId = 0, _pfN = 0;
+let _lastPathStats = {found:false, finalized:0, duplicateFinalized:0, stalePops:0, pushes:0};
+
+function routeBias(seed, from, to){
+  if(!seed) return 0;
+  let h = (Math.imul((seed|0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(from+1, 0xc2b2ae35) ^ Math.imul(to+1, 0x27d4eb2f)) >>> 0;
+  h ^= h >>> 16;
+  return (h & 1023) / 1023 * .035;
+}
+
+export function getLastPathStats(){ return {..._lastPathStats}; }
+
+export function findPath(fromPos, toPos, routeSeed=0){
   const { wps, edges } = G.map;
   const a = nearestWp(fromPos), b = nearestWp(toPos);
-  if(a===b) return [];
+  if(a===b){
+    _lastPathStats = {found:true, finalized:0, duplicateFinalized:0, stalePops:0, pushes:0};
+    return [];
+  }
   const n = wps.length;
   if(_pfN < n){
     _pfN = n;
     _pfG = new Float64Array(n);
     _pfFrom = new Int32Array(n);
     _pfGen = new Int32Array(n);
+    _pfClosed = new Int32Array(n);
   }
+  if(_pfGenId >= 0x7ffffffe){ _pfGen.fill(0); _pfClosed.fill(0); _pfGenId = 0; }
   _pfGenId++;
-  const gen = _pfGenId, g = _pfG, cameFrom = _pfFrom, seen = _pfGen;
+  const gen = _pfGenId, g = _pfG, cameFrom = _pfFrom, seen = _pfGen, closed = _pfClosed;
   const c2d = (i,j)=>{ const dx=wps[i].x-wps[j].x, dz=wps[i].z-wps[j].z; return Math.hypot(dx,dz); };
-  const cost = (i,j)=> c2d(i,j) * (Math.abs(wps[i].y-wps[j].y)>.2?1.35:1);
+  const cost = (i,j)=> c2d(i,j) * (Math.abs(wps[i].y-wps[j].y)>.2?1.35:1) * (1+routeBias(routeSeed,i,j));
   seen[a] = gen; g[a] = 0; cameFrom[a] = -1;
   const open = [];
   heappush(open, a, c2d(a,b));
   let found = false;
-  let pops = 0;
+  let finalized = 0, stalePops = 0, pushes = 1;
   while(open.length){
-    if(++pops > 9000) break;   // 防御性上限
     const cur = heappop(open).id;
+    if(closed[cur] === gen){ stalePops++; continue; }
+    closed[cur] = gen;
+    finalized++;
     if(cur === b){ found = true; break; }
     for(const nx of edges[cur]){
+      if(closed[nx] === gen) continue;
       const tg = g[cur] + cost(cur, nx);
       if(seen[nx] !== gen || tg < g[nx]){
         seen[nx] = gen;
         g[nx] = tg; cameFrom[nx] = cur;
-        heappush(open, nx, tg + c2d(nx, b) * (jitter>0?(.85+Math.random()*jitter):1));
+        heappush(open, nx, tg + c2d(nx, b));
+        pushes++;
       }
     }
   }
+  _lastPathStats = {found, finalized, duplicateFinalized:0, stalePops, pushes};
   if(!found) return [];
   const raw=[]; let c=b; while(c!==a){ raw.push(c); c=cameFrom[c]; } raw.push(a); raw.reverse();
   return raw.map(i=> V3(wps[i].x, wps[i].y, wps[i].z));
